@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "macros.html" import field_error %}
+{% block title %}{{ '编辑用户' if editing else '新增用户' }}{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <div class="panel-head">
+    <h1>{{ '编辑用户' if editing else '新增用户' }}</h1>
+    <a class="btn" href="{{ url_for('users.index') }}">返回</a>
+  </div>
+  {{ field_error(errors) }}
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label>登录名 <i>*</i>
+      {% if editing %}
+      <input value="{{ form.login_name }}" readonly>
+      {% else %}
+      <input name="login_name" value="{{ form.login_name }}" pattern="[A-Za-z]+" required placeholder="仅字母">
+      {% endif %}
+    </label>
+    <label>显示名 <i>*</i><input name="display_name" value="{{ form.display_name }}" required maxlength="32" placeholder="中文名，用于操作人显示"></label>
+    <label>角色 <i>*</i>
+      <select name="role">
+        <option value="admin" {% if form.role=='admin' %}selected{% endif %}>系统管理员</option>
+        <option value="user" {% if form.role=='user' %}selected{% endif %}>普通业务用户</option>
+        <option value="viewer" {% if form.role=='viewer' %}selected{% endif %}>查看用户</option>
+      </select>
+    </label>
+    {% if editing %}
+    <label>状态
+      <select name="status">
+        <option value="active" {% if form.status=='active' %}selected{% endif %}>启用</option>
+        <option value="disabled" {% if form.status=='disabled' %}selected{% endif %}>禁用</option>
+      </select>
+    </label>
+    {% endif %}
+    <label class="checkline"><input type="checkbox" name="allow_rate" value="1" {% if form.allow_rate=='1' %}checked{% endif %}>授权维护汇率</label>
+    <label>{{ '重置密码' if editing else '密码' }} {% if not editing %}<i>*</i>{% endif %}
+      <input type="password" name="password" {% if not editing %}required{% endif %} minlength="6" placeholder="{{ '留空则不修改' if editing else '至少 6 位' }}">
+    </label>
+    <div class="form-actions"><button class="btn primary" type="submit">保存</button></div>
+  </form>
+</section>
+{% endblock %}

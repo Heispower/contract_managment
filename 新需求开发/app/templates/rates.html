@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "macros.html" import render_pager, colhead with context %}
+{% block title %}汇率维护{% endblock %}
+{% block main_class %} list-page{% endblock %}
+{% block content %}
+<h1 class="page-title">汇率维护</h1>
+<section class="table-card">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      {% if can_rate %}
+      <a class="btn primary" href="{{ url_for('rates.new') }}">新增汇率</a>
+      <button class="btn js-batch-delete" type="button" data-action="{{ url_for('rates.batch_delete') }}" data-message="确认删除选中的汇率？删除后该月份需重新维护，已登记发票上的汇率数值不会改动。">批量删除</button>
+      {% endif %}
+    </div>
+    <div class="toolbar-right"><a class="btn" href="{{ url_for('rates.index') }}">刷新</a></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {% if can_rate %}<th class="check" data-col="check"><input type="checkbox" class="check-all" aria-label="全选"></th>{% endif %}
+          {{ colhead('月份', 'month') }}
+          {{ colhead('源币种', 'source_currency') }}
+          {{ colhead('目标币种', 'target_currency') }}
+          {{ colhead('汇率', 'rate', 'num') }}
+          {{ colhead('生效日期', 'effective_date') }}
+          {{ colhead('维护人', 'maintainer_name') }}
+          {{ colhead('备注', 'remark') }}
+          {{ colhead('操作', '', 'ops') }}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% if can_rate %}<td class="check"><input type="checkbox" class="row-check" value="{{ row['id'] }}"></td>{% endif %}
+          <td>{{ row['month'] }}</td>
+          <td>{{ row['source_currency'] }}</td>
+          <td>{{ row['target_currency'] }}</td>
+          <td class="num">{{ row['rate']|ratefmt }}</td>
+          <td>{{ row['effective_date'] }}</td>
+          <td>{{ row['maintainer_name'] }}</td>
+          <td>{{ row['remark'] or '' }}</td>
+          <td class="ops">{% if can_rate %}<a href="{{ url_for('rates.edit', rid=row['id']) }}">编辑</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="{{ 9 if can_rate else 8 }}">暂无汇率。发票登记前请先维护当月 USD/CNY 汇率。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pager(pager, 'rates.index') }}
+</section>
+{% endblock %}

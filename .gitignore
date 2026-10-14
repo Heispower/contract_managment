@@ -1,0 +1,47 @@
+# Python 字节码与缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# 公共支持包与依赖包：换电脑后由「安装依赖.bat」在本机重新安装，不上传
+.venv/
+venv/
+env/
+pydeps/
+deps-cache/
+node_modules/
+frontend/dist/
+.vite/
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+
+# 操作系统与编辑器
+desktop.ini
+Thumbs.db
+ehthumbs.db
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Windows 保留设备名。命令重定向写错时会在目录里生成这个空文件
+nul
+
+# 临时文件、日志、网盘同步残留
+~$*
+*.tmp
+*.bak
+*.log
+*.baiduyun.uploading.cfg

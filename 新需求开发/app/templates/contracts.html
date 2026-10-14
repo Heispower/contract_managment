@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "macros.html" import render_pager, colhead, sort_keep with context %}
+{% block title %}合同登记{% endblock %}
+{% block main_class %} list-page{% endblock %}
+{% block content %}
+{% set opened = filters.get('contract_no') or filters.get('product_name') or filters.get('party_b') or filters.get('party_a') or filters.get('sign_from') or filters.get('sign_to') %}
+<h1 class="page-title">合同登记</h1>
+<form class="filter-card" method="get">
+  <input type="hidden" name="page_size" value="{{ pager.page_size }}">
+  {{ sort_keep() }}
+  <div class="filter-row">
+    <input name="keyword" value="{{ filters.get('keyword','') }}" placeholder="关键字">
+    <select name="business_type">
+      <option value="">业务类型</option>
+      <option value="锰矿" {% if filters.get('business_type')=='锰矿' %}selected{% endif %}>锰矿</option>
+      <option value="铝矿" {% if filters.get('business_type')=='铝矿' %}selected{% endif %}>铝矿</option>
+    </select>
+    <select name="number_year">
+      <option value="">编号年份</option>
+      {% for year in years %}
+      <option value="{{ year }}" {% if filters.get('number_year')==year|string %}selected{% endif %}>{{ year }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn primary" type="submit">查询</button>
+    <a class="btn" href="{{ url_for('contracts.index') }}">重置</a>
+    <button class="btn text expand-btn" type="button" data-expand="more-filters">{{ '收起' if opened else '展开' }}</button>
+  </div>
+  <div class="filter-row more {% if opened %}open{% endif %}" id="more-filters">
+    <input name="contract_no" value="{{ filters.get('contract_no','') }}" placeholder="合同编号">
+    <input name="product_name" value="{{ filters.get('product_name','') }}" placeholder="产品/合同名称">
+    <input name="party_b" value="{{ filters.get('party_b','') }}" placeholder="乙方">
+    <input name="party_a" value="{{ filters.get('party_a','') }}" placeholder="甲方">
+    <input type="date" name="sign_from" value="{{ filters.get('sign_from','') }}" title="签订时间起">
+    <input type="date" name="sign_to" value="{{ filters.get('sign_to','') }}" title="签订时间止">
+  </div>
+</form>
+<section class="table-card">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      {% if can_write %}
+      <a class="btn primary" href="{{ url_for('contracts.new') }}">新增</a>
+      <a class="btn" href="{{ url_for('contracts.import_xlsx') }}">批量导入</a>
+      <button class="btn js-batch-delete" type="button" data-action="{{ url_for('contracts.batch_delete') }}" data-message="确认删除选中的合同？删除后编号进入对应规则的空闲池，下一笔同规则合同将优先复用最小空闲号。">批量删除</button>
+      {% endif %}
+    </div>
+    <div class="toolbar-right">
+      <a class="btn" href="{{ url_for('contracts.export_xlsx') }}?{{ keep(page=none) }}">导出</a>
+      <a class="btn" href="{{ request.full_path }}">刷新</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {% if can_write %}<th class="check" data-col="check"><input type="checkbox" class="check-all" aria-label="全选"></th>{% endif %}
+          {{ colhead('序号', '', 'seq') }}
+          {{ colhead('合同编号', 'contract_no', 'mono') }}
+          {{ colhead('业务类型', 'business_type') }}
+          {{ colhead('编号年份', 'number_year') }}
+          {{ colhead('产品/合同名称', 'product_name') }}
+          {{ colhead('乙方', 'party_b') }}
+          {{ colhead('甲方', 'party_a') }}
+          {{ colhead('合同金额（CNY）', 'amount_cny', 'num') }}
+          {{ colhead('签订时间', 'sign_date') }}
+          {{ colhead('操作', '', 'ops') }}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% if can_write %}<td class="check"><input type="checkbox" class="row-check" value="{{ row['id'] }}"></td>{% endif %}
+          <td>{{ pager.start + loop.index0 }}</td>
+          <td class="mono">{{ row['contract_no'] }}{% if row['manual_edited'] %}<span class="badge">手改</span>{% endif %}</td>
+          <td>{{ row['business_type'] }}</td>
+          <td>{{ row['number_year'] }}</td>
+          <td>{{ row['product_name'] }}</td>
+          <td>{{ row['party_b'] }}</td>
+          <td>{{ row['party_a'] }}</td>
+          <td class="num">{{ row['amount_cny']|money }}</td>
+          <td>{{ row['sign_date'] }}</td>
+          <td class="ops">
+            {% if can_mutate_row(row) %}
+            <a href="{{ url_for('contracts.edit', cid=row['id']) }}">编辑</a>
+            {% endif %}
+            {% if can_manual %}
+            <a href="{{ url_for('contracts.manual', cid=row['id']) }}">手动编辑</a>
+            {% endif %}
+            {% if can_mutate_row(row) %}
+            <button class="link js-delete" type="button" data-action="{{ url_for('contracts.delete', cid=row['id']) }}" data-message="确认删除合同 {{ row['contract_no'] }}？删除后该编号进入{{ row['business_type'] }}合同空闲池。">删除</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td class="empty" colspan="11">暂无数据</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pager(pager, 'contracts.index') }}
+</section>
+{% endblock %}

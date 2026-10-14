@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+  <div class="panel-head">
+    <h1>{{ title }}</h1>
+    <a class="btn" href="{{ back_url }}">返回列表</a>
+  </div>
+  <div class="preview-box">
+    <p>{{ intro }}</p>
+    <ul class="tips">
+      {% for line in tips %}
+      <li>{{ line }}</li>
+      {% endfor %}
+    </ul>
+    <p><a href="{{ template_url }}">下载导入模板</a></p>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <label>Excel 文件 <i>*</i>
+      <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+    </label>
+    <div class="form-actions">
+      <button class="btn primary" type="submit">开始导入</button>
+    </div>
+  </form>
+  {% if result %}
+  <h2>本次结果</h2>
+  <p>成功 {{ result.imported }} 条，跳过 {{ result.skipped }} 条。</p>
+  {% if result.ignored_sheets %}
+  <p class="hint">未识别表头、未导入的工作表：{{ result.ignored_sheets | join('、') }}</p>
+  {% endif %}
+  {% if result.errors %}
+  <div class="table-wrap">
+    <table class="plain">
+      <thead><tr><th>位置</th><th>原因</th></tr></thead>
+      <tbody>
+        {% for item in result.errors %}
+        <tr><td>{{ item.where }}</td><td>{{ item.message }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if result.hidden_errors %}
+  <p class="hint">还有 {{ result.hidden_errors }} 条错误未列出。</p>
+  {% endif %}
+  {% endif %}
+  {% if result.warnings %}
+  <div class="table-wrap">
+    <table class="plain">
+      <thead><tr><th>位置</th><th>提示</th></tr></thead>
+      <tbody>
+        {% for item in result.warnings %}
+        <tr><td>{{ item.where }}</td><td>{{ item.message }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}
