@@ -1,13 +1,17 @@
 <template>
-  <ListShell ref="shell" title="客商管理" storage-key="party" :columns="columns" :rows="rows" :total="total" :page="page" :page-size="pageSize" export-module="party" :export-query="exportQuery" @query="load" @reset="reset" @page="(p)=>{page=p;load()}" @size="(s)=>{pageSize=s;page=1;load()}" @select="syncPick">
+  <ListShell ref="shell" title="客商" :bare="embedded" storage-key="party" :columns="columns" :rows="rows" :total="total" :page="page" :page-size="pageSize" export-module="party" :export-query="exportQuery" @query="load" @reset="reset" @page="(p)=>{page=p;load()}" @size="(s)=>{pageSize=s;page=1;load()}" @select="syncPick">
     <template #title>
-      客商管理
+      客商
       <el-select v-model="partyType" style="width:140px;margin-left:12px" @change="load">
         <el-option label="供应商" value="supplier" />
         <el-option label="客户" value="customer" />
       </el-select>
     </template>
     <template #filters="{ expanded }">
+      <el-select v-if="embedded" v-model="partyType" style="width:140px" @change="load">
+        <el-option label="供应商" value="supplier" />
+        <el-option label="客户" value="customer" />
+      </el-select>
       <el-input v-model="keyword" placeholder="关键字" style="width:180px" />
       <el-select v-model="category" clearable filterable :placeholder="partyType === 'supplier' ? '供应商类别' : '客户类别'" style="width:150px">
         <el-option v-for="item in categories" :key="item" :label="item" :value="item" />
@@ -109,6 +113,7 @@ import http from "../api";
 import ListShell from "../components/ListShell.vue";
 import ImportWizard from "../components/ImportWizard.vue";
 
+const props = defineProps({ embedded: Boolean });
 const partyType = ref("supplier");
 const keyword = ref("");
 const category = ref("");

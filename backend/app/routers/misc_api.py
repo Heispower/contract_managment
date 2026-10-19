@@ -304,6 +304,33 @@ def available_plans(request: Request, user=Depends(current_user), db=Depends(get
     return ok(items)
 
 
+@router.put("/purchase-plans/{row_id}")
+def update_plan(row_id: int, payload: dict, user=Depends(current_user), db=Depends(get_db)):
+    row = get_row(db, PurchasePlan, row_id, user.session_company_id)
+    ensure_creator(row, user)
+    ensure_version(row, payload.get("version"))
+    code = (payload.get("material_code") or row.material_code or "").strip()
+    if code != row.material_code:
+        raise BizError("物料编号不支持修改")
+    qty = D(payload.get("qty") if payload.get("qty") not in (None, "") else row.qty)
+    if qty <= 0:
+        raise BizError("采购数量必须大于 0")
+    bought = calc.purchased_qty(db, user.session_company_id, row.material_code)
+    if qty < bought:
+        raise BizError(f"采购数量不能小于已采购数量 {qty_str(bought)}")
+    for key in ("plan_month", "purchase_seq", "plan_no", "category", "name_cn", "name_en", "spec", "unit", "purpose", "use_dept", "remark"):
+        if key in payload:
+            setattr(row, key, payload.get(key) or "")
+    for key in ("stock_qty", "transit_qty", "consume_4m"):
+        if key in payload:
+            raw = payload.get(key)
+            setattr(row, key, None if raw in (None, "") else D(raw))
+    row.qty = qty
+    bump(row, user.employee_id)
+    op_log(db, user, user.session_company_id, "修改", "purchase_plan", row.id, {"code": row.material_code, "qty": qty_str(qty)})
+    return ok({"id": row.id, "version": row.version})
+
+
 @router.delete("/purchase-plans/{row_id}")
 def delete_plan(row_id: int, version: int, user=Depends(current_user), db=Depends(get_db)):
     row = get_row(db, PurchasePlan, row_id, user.session_company_id)
@@ -1204,6 +1231,38 @@ def create_transfer(payload: dict, user=Depends(current_user), db=Depends(get_db
     return ok({"id": row.id, "version": row.version})
 
 
+@router.put("/transfer-bills/{row_id}")
+def update_transfer(row_id: int, payload: dict, user=Depends(current_user), db=Depends(get_db)):
+    row = get_row(db, TransferBill, row_id, user.session_company_id)
+    ensure_creator(row, user)
+    ensure_version(row, payload.get("version"))
+    code = (payload.get("bill_code") or row.bill_code or "").strip()
+    if not code:
+        raise BizError("单据编号不能为空")
+    if code != row.bill_code:
+        ensure_code_free(db, TransferBill, user.session_company_id, TransferBill.bill_code, code, row.id)
+    warehouse_out = int(payload.get("warehouse_out") or row.warehouse_out)
+    warehouse_in = int(payload.get("warehouse_in") or row.warehouse_in)
+    get_row(db, Warehouse, warehouse_out, user.session_company_id)
+    get_row(db, Warehouse, warehouse_in, user.session_company_id)
+    material_code = (payload.get("material_code") or row.material_code or "").strip()
+    if not material_code:
+        raise BizError("物料编号不能为空")
+    qty = D(payload.get("qty") if payload.get("qty") not in (None, "") else row.qty)
+    if qty <= 0:
+        raise BizError("数量必须大于 0")
+    row.bill_code = code
+    row.bill_date = parse_date(payload.get("bill_date")) or row.bill_date
+    row.warehouse_out = warehouse_out
+    row.warehouse_in = warehouse_in
+    row.material_code = material_code
+    row.qty = qty
+    row.remark = payload.get("remark") or ""
+    bump(row, user.employee_id)
+    op_log(db, user, user.session_company_id, "修改", "transfer", row.id, {"code": code, "qty": qty_str(qty)})
+    return ok({"id": row.id, "version": row.version})
+
+
 @router.delete("/transfer-bills/{row_id}")
 def delete_transfer(row_id: int, version: int, user=Depends(current_user), db=Depends(get_db)):
     row = get_row(db, TransferBill, row_id, user.session_company_id)
@@ -1243,12 +1302,47 @@ def create_check(payload: dict, user=Depends(current_user), db=Depends(get_db)):
     get_row(db, Warehouse, warehouse_id, user.session_company_id)
     stock = db.query(Stock).filter(Stock.company_id == user.session_company_id, Stock.warehouse_id == warehouse_id, Stock.material_code == payload.get("material_code"), Stock.deleted_at.is_(None)).first()
     book = D(stock.qty) if stock else ZERO
-    row = CheckBill(bill_code=code, bill_date=date.fromisoformat(payload.get("bill_date")), warehouse_id=warehouse_id, material_code=payload.get("material_code"), book_qty=book, actual_qty=D(payload.get("actual_qty") or 0), remark=payload.get("remark") or "")
+    actual_qty = D(payload.get("actual_qty") or 0)
+    if actual_qty < 0:
+        raise BizError("实际数量不能小于 0")
+    row = CheckBill(bill_code=code, bill_date=date.fromisoformat(payload.get("bill_date")), warehouse_id=warehouse_id, material_code=payload.get("material_code"), book_qty=book, actual_qty=actual_qty, remark=payload.get("remark") or "")
     stamp_new(row, user, user.session_company_id)
     db.add(row)
     db.flush()
     op_log(db, user, user.session_company_id, "新增", "check", row.id, {"code": code, "diff": qty_str(D(row.actual_qty) - book)})
     return ok({"id": row.id, "version": row.version, "book_qty": qty_str(book)})
+
+
+@router.put("/check-bills/{row_id}")
+def update_check(row_id: int, payload: dict, user=Depends(current_user), db=Depends(get_db)):
+    row = get_row(db, CheckBill, row_id, user.session_company_id)
+    ensure_creator(row, user)
+    ensure_version(row, payload.get("version"))
+    code = (payload.get("bill_code") or row.bill_code or "").strip()
+    if not code:
+        raise BizError("单据编号不能为空")
+    if code != row.bill_code:
+        ensure_code_free(db, CheckBill, user.session_company_id, CheckBill.bill_code, code, row.id)
+    warehouse_id = int(payload.get("warehouse_id") or row.warehouse_id)
+    get_row(db, Warehouse, warehouse_id, user.session_company_id)
+    material_code = (payload.get("material_code") or row.material_code or "").strip()
+    if not material_code:
+        raise BizError("物料编号不能为空")
+    actual_qty = D(payload.get("actual_qty") if payload.get("actual_qty") not in (None, "") else row.actual_qty)
+    if actual_qty < 0:
+        raise BizError("实际数量不能小于 0")
+    if warehouse_id != row.warehouse_id or material_code != row.material_code:
+        stock = db.query(Stock).filter(Stock.company_id == user.session_company_id, Stock.warehouse_id == warehouse_id, Stock.material_code == material_code, Stock.deleted_at.is_(None)).first()
+        row.book_qty = D(stock.qty) if stock else ZERO
+    row.bill_code = code
+    row.bill_date = parse_date(payload.get("bill_date")) or row.bill_date
+    row.warehouse_id = warehouse_id
+    row.material_code = material_code
+    row.actual_qty = actual_qty
+    row.remark = payload.get("remark") or ""
+    bump(row, user.employee_id)
+    op_log(db, user, user.session_company_id, "修改", "check", row.id, {"code": code, "diff": qty_str(actual_qty - D(row.book_qty))})
+    return ok({"id": row.id, "version": row.version})
 
 
 @router.delete("/check-bills/{row_id}")

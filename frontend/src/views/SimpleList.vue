@@ -1,5 +1,5 @@
 <template>
-  <ListShell ref="shell" :title="cfg.title" :storage-key="kind" :columns="cfg.columns" :rows="rows" :total="total" :page="page" :page-size="pageSize" :summary="summary" :start-expanded="kind === 'project'" :export-module="exportModule" :export-query="exportQuery" @query="load" @reset="reset" @page="(p)=>{page=p;load()}" @size="(s)=>{pageSize=s;page=1;load()}">
+  <ListShell ref="shell" :title="cfg.title" :bare="embedded" :storage-key="kind" :columns="cfg.columns" :rows="rows" :total="total" :page="page" :page-size="pageSize" :summary="summary" :start-expanded="kind === 'project'" :export-module="exportModule" :export-query="exportQuery" @query="load" @reset="reset" @page="(p)=>{page=p;load()}" @size="(s)=>{pageSize=s;page=1;load()}">
     <template #filters="{ expanded }">
       <template v-if="kind === 'project'">
         <label class="filter-item"><span>关键字：</span><el-input v-model="keyword" clearable placeholder="请输入关键字" style="width:180px" /></label>
@@ -59,7 +59,7 @@
       <el-popconfirm v-if="cfg.remove" title="确定删除？" @confirm="remove(row)"><template #reference><span class="ops" style="margin-left:8px">删除</span></template></el-popconfirm>
     </template>
   </ListShell>
-  <el-dialog v-model="visible" :title="cfg.title" width="560px">
+  <el-dialog v-model="visible" :title="(form.id ? '编辑' : '新增') + cfg.title" width="560px">
     <el-form label-width="100px">
       <el-form-item v-for="field in cfg.fields" :key="field.key" :label="field.label">
         <el-select v-if="field.options" v-model="form[field.key]" style="width:100%">
@@ -88,7 +88,7 @@ import http, { batchDelete } from "../api";
 import ListShell from "../components/ListShell.vue";
 import ImportWizard from "../components/ImportWizard.vue";
 
-const props = defineProps({ kind: String });
+const props = defineProps({ kind: String, embedded: Boolean });
 const catalogs = {
   project: { title: "项目", api: "/api/projects", create: "新增项目", edit: true, remove: true, columns: [
     { key: "project_code", label: "项目编号", fixed: "left" }, { key: "name", label: "项目名称" },
@@ -101,31 +101,39 @@ const catalogs = {
     { key: "customer_name", label: "客户名称" }, { key: "status", label: "状态", options: ["进行中", "已完成", "已终止"] },
     { key: "start_date", label: "开始日期", date: true }, { key: "end_date", label: "结束日期", date: true }, { key: "remark", label: "备注" },
   ]},
-  plan: { title: "采购计划", api: "/api/purchase-plans", remove: true, columns: [
+  plan: { title: "采购计划", api: "/api/purchase-plans", edit: true, remove: true, columns: [
     { key: "plan_month", label: "计划月份" }, { key: "purchase_seq", label: "采购序号" }, { key: "material_code", label: "物料编号", fixed: "left" },
     { key: "plan_no", label: "采购计划单号" }, { key: "category", label: "使用设备" }, { key: "name_cn", label: "中文名称" }, { key: "spec", label: "规格型号" }, { key: "unit", label: "单位" },
     { key: "qty", label: "采购数量" }, { key: "bought_qty", label: "已采购数量" }, { key: "remain_qty", label: "待采购数量" },
     { key: "purchase_state", label: "是否采购", tag: true }, { key: "purpose", label: "用途" },
-  ], fields: [] },
+  ], fields: [
+    { key: "material_code", label: "物料编号", disabled: true },
+    { key: "plan_month", label: "计划月份" }, { key: "purchase_seq", label: "采购序号" },
+    { key: "plan_no", label: "采购计划单号" }, { key: "category", label: "使用设备" },
+    { key: "name_cn", label: "中文名称" }, { key: "name_en", label: "英文名称" },
+    { key: "spec", label: "规格型号" }, { key: "unit", label: "单位" },
+    { key: "qty", label: "采购数量" }, { key: "purpose", label: "用途" },
+    { key: "use_dept", label: "使用部门" }, { key: "stock_qty", label: "库存数量" },
+    { key: "transit_qty", label: "在途数量" }, { key: "consume_4m", label: "4个月消耗量" },
+    { key: "remark", label: "备注" },
+  ]},
   stock: { title: "库存余额", api: "/api/stocks", remove: true, columns: [
     { key: "material_code", label: "物料编号", fixed: "left" }, { key: "warehouse_name", label: "仓库" }, { key: "goods_code", label: "商品编码" },
     { key: "goods_name", label: "商品名称" }, { key: "unit", label: "单位" }, { key: "qty", label: "数量" }, { key: "cost", label: "成本" },
   ], fields: [] },
-  transfer: { title: "调拨记录", api: "/api/transfer-bills", create: "新增调拨记录", remove: true, columns: [
+  transfer: { title: "调拨记录", api: "/api/transfer-bills", create: "新增调拨记录", edit: true, remove: true, columns: [
     { key: "bill_code", label: "单号", fixed: "left" }, { key: "bill_date", label: "日期" }, { key: "warehouse_out_name", label: "调出仓库" },
     { key: "warehouse_in_name", label: "调入仓库" }, { key: "material_code", label: "物料编号" }, { key: "qty", label: "数量" }, { key: "remark", label: "备注" },
   ], fields: [
-    { key: "bill_date", label: "日期" }, { key: "warehouse_out", label: "调出仓库", lookup: "warehouses" }, { key: "warehouse_in", label: "调入仓库", lookup: "warehouses" },
+    { key: "bill_code", label: "单号" }, { key: "bill_date", label: "日期" }, { key: "warehouse_out", label: "调出仓库", lookup: "warehouses" }, { key: "warehouse_in", label: "调入仓库", lookup: "warehouses" },
     { key: "material_code", label: "物料编号" }, { key: "qty", label: "数量" }, { key: "remark", label: "备注" },
   ]},
-  check: { title: "盘点记录", api: "/api/check-bills", create: "新增盘点记录", remove: true, columns: [
+  check: { title: "盘点记录", api: "/api/check-bills", create: "新增盘点记录", edit: true, remove: true, columns: [
     { key: "bill_code", label: "单号", fixed: "left" }, { key: "bill_date", label: "日期" }, { key: "warehouse_name", label: "仓库" },
     { key: "material_code", label: "物料编号" }, { key: "book_qty", label: "账面数量" }, { key: "actual_qty", label: "实际数量" }, { key: "diff_qty", label: "差异" },
   ], fields: [
-    { key: "bill_date", label: "日期" }, { key: "warehouse_id", label: "仓库", lookup: "warehouses" }, { key: "material_code", label: "物料编号" }, { key: "actual_qty", label: "实际数量" }, { key: "remark", label: "备注" },
+    { key: "bill_code", label: "单号" }, { key: "bill_date", label: "日期" }, { key: "warehouse_id", label: "仓库", lookup: "warehouses" }, { key: "material_code", label: "物料编号" }, { key: "actual_qty", label: "实际数量" }, { key: "remark", label: "备注" },
   ]},
-  income: { title: "其他收入", api: "/api/other-bills", extra: { direction: "income" }, create: "新增其他收入", edit: true, remove: true, columns: billCols(), fields: billFields() },
-  expense: { title: "其他支出", api: "/api/other-bills", extra: { direction: "expense" }, create: "新增其他支出", edit: true, remove: true, columns: billCols(), fields: billFields() },
   role: dict("角色", "/api/roles"),
   dept: dict("部门", "/api/depts"),
   post: dict("岗位", "/api/posts"),
@@ -151,8 +159,6 @@ const catalogs = {
     { key: "rate", label: "汇率" }, { key: "effective_date", label: "生效日期", date: true },
   ]},
 };
-function billCols() { return [{ key: "bill_code", label: "单号", fixed: "left" }, { key: "bill_date", label: "日期" }, { key: "party_name", label: "客商" }, { key: "contract_code", label: "合同编号" }, { key: "amount", label: "金额", money: true }, { key: "account_name", label: "账户" }, { key: "remark", label: "备注" }]; }
-function billFields() { return [{ key: "bill_date", label: "日期" }, { key: "party_name", label: "客商" }, { key: "contract_code", label: "合同编号" }, { key: "amount", label: "金额" }, { key: "account_name", label: "账户" }, { key: "remark", label: "备注" }]; }
 function dict(title, api) { return { title, api, create: "新增", edit: true, remove: true, columns: [{ key: "code", label: "编码", fixed: "left" }, { key: "name", label: "名称" }, { key: "remark", label: "备注" }], fields: [{ key: "code", label: "编码" }, { key: "name", label: "名称" }, { key: "remark", label: "备注" }] }; }
 
 const cfg = computed(() => catalogs[props.kind]);
@@ -162,8 +168,6 @@ const exportModule = computed(() => ({
   stock: "stock",
   transfer: "transfer",
   check: "check",
-  income: "other",
-  expense: "other",
   role: "roles",
   dept: "depts",
   post: "posts",

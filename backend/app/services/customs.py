@@ -1160,7 +1160,14 @@ def generate_invoice(db, user, company_id, payload):
     busy = [row.material_code for row in rows if row.invoice_id]
     if busy:
         raise BizError(f"物料 {'、'.join(busy)} 已生成报关发票")
-    code = _text(payload.get("invoice_no")) or next_daily_code(db, CustomsInvoice, company_id, CustomsInvoice.invoice_no, "BG")
+    specified = _text(payload.get("invoice_no"))
+    allocated = None
+    if specified:
+        code = specified
+    else:
+        from .numbering import take_invoice_number
+        allocated = take_invoice_number(db, company_id, payload)
+        code = allocated["number"]
     ensure_code_free(db, CustomsInvoice, company_id, CustomsInvoice.invoice_no, code)
     bill_date = parse_date(payload.get("invoice_date")) or date.today()
     rate = month_rate(db, company_id, bill_date)
@@ -1224,6 +1231,8 @@ def generate_invoice(db, user, company_id, payload):
             bump(item, user.employee_id)
     invoice.total_amount = round2(total)
     invoice.total_usd = round2(total / rate) if rate else ZERO
+    from .numbering import sync_customs_invoice
+    sync_customs_invoice(db, user, company_id, invoice, payload, allocated)
     op_log(db, user, company_id, "生成报关发票", "customs_invoice", code, {"materials": [row.id for row in rows]})
     db.flush()
     return invoice
@@ -1585,6 +1594,8 @@ def save_invoice(db, user, company_id, row: CustomsInvoice, payload):
     if row.exchange_rate:
         row.total_usd = round2(D(row.total_amount) / D(row.exchange_rate))
     bump(row, user.employee_id)
+    from .numbering import refresh_customs_invoice
+    refresh_customs_invoice(db, user, company_id, row)
     op_log(db, user, company_id, "修改", "customs_invoice", row.invoice_no, {})
     return row
 
@@ -1902,6 +1913,8 @@ def unused_invoices(db, company_id, material_ids=None):
 
 def delete_invoice(db, user, company_id, row):
     ensure_creator(row, user)
+    from .numbering import detach_customs_invoice
+    detach_customs_invoice(db, user, company_id, row)
     if row.customs_element_id:
         raise BizError("该物料已经被报关发票/报关要素引用，请先解除关联。")
     for link in q(db, CustomsInvoiceLink, company_id).filter(CustomsInvoiceLink.invoice_id == row.id).all():

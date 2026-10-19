@@ -241,6 +241,8 @@ def contract_detail(db, row: Contract):
         "ordered_amount": money_str(calc.ordered_amount(db, row.id)),
         "invoice_locked": bool(row.invoice_locked),
     })
+    from .numbering import contract_form_meta
+    brief.update(contract_form_meta(db, row))
     return brief
 
 

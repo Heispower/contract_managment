@@ -286,6 +286,7 @@ def save_contract(db, user, company_id, payload, contract: Contract | None = Non
         if status not in ("未签订", "已签订", "已终止"):
             raise BizError("状态不允许这样变更")
 
+    allocated = None
     code = (payload.get("contract_code") or "").strip()
     if contract is None:
         if not code:
@@ -294,6 +295,10 @@ def save_contract(db, user, company_id, payload, contract: Contract | None = Non
                 root = _root_contract(db, company_id, parent)
                 code = next_supplement_code(db, company_id, root.contract_code)
                 payload["parent_contract_id"] = root.id
+            elif direction == "purchase":
+                from .numbering import take_purchase_number
+                allocated = take_purchase_number(db, company_id, payload)
+                code = allocated["number"]
             else:
                 code = next_contract_code(db, company_id, direction)
         ensure_code_free(db, Contract, company_id, Contract.contract_code, code)
@@ -402,6 +407,9 @@ def save_contract(db, user, company_id, payload, contract: Contract | None = Non
         bump(contract, user.employee_id)
     calc.refresh_settlement(db, contract)
     op_log(db, user, company_id, "修改" if not creating else "新增", "contract", contract.id, {"code": contract.contract_code, "amount": money_str(contract.amount)})
+    if direction == "purchase" and contract.nature == "main":
+        from .numbering import sync_purchase_contract
+        sync_purchase_contract(db, user, company_id, contract, payload or {}, allocated)
     db.flush()
     return contract
 
@@ -442,6 +450,9 @@ def delete_contract(db, user, company_id, contract: Contract):
     if children:
         raise BizError("请先删除其补充协议")
     refuse_contract(db, company_id, contract.id)
+    if contract.direction == "purchase" and contract.nature == "main":
+        from .numbering import detach_purchase_contract
+        detach_purchase_contract(db, user, company_id, contract)
     soft_delete(contract, user.employee_id)
     for row in calc.items_of(db, contract.id):
         soft_delete(row, user.employee_id)

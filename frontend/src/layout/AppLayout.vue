@@ -7,15 +7,17 @@
       </div>
       <el-menu class="menu" mode="horizontal" :ellipsis="true" :default-active="active" router>
         <el-menu-item index="/home">首页</el-menu-item>
-        <el-menu-item index="/party/list">客商管理</el-menu-item>
-        <el-menu-item index="/project/list">项目</el-menu-item>
+        <el-menu-item index="/business">商务信息</el-menu-item>
         <el-menu-item index="/purchase-plan">采购计划</el-menu-item>
+        <el-sub-menu index="number">
+          <template #title>编号</template>
+          <el-menu-item index="/number/contracts">合同编号</el-menu-item>
+          <el-menu-item index="/number/invoices">发票编号</el-menu-item>
+        </el-sub-menu>
         <el-sub-menu index="contract">
-          <template #title>合同订单</template>
+          <template #title>合同</template>
           <el-menu-item index="/contract/sale">销售合同</el-menu-item>
           <el-menu-item index="/contract/purchase">采购合同</el-menu-item>
-          <el-menu-item index="/order/sale">销售订单</el-menu-item>
-          <el-menu-item index="/order/purchase">采购订单</el-menu-item>
         </el-sub-menu>
         <el-sub-menu index="wms">
           <template #title>仓储管理</template>
@@ -36,8 +38,6 @@
           <template #title>结算管理</template>
           <el-menu-item index="/settlement/receipt">收款单</el-menu-item>
           <el-menu-item index="/settlement/payment">付款单</el-menu-item>
-          <el-menu-item index="/settlement/other-income">其他收入</el-menu-item>
-          <el-menu-item index="/settlement/other-expense">其他支出</el-menu-item>
           <el-menu-item index="/settlement/pending-receipt">待收款</el-menu-item>
           <el-menu-item index="/settlement/pending-payment">待付款</el-menu-item>
         </el-sub-menu>

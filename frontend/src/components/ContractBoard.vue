@@ -178,23 +178,6 @@
       </table>
       <div v-else class="empty-box">暂无数据</div>
     </div>
-
-    <div v-else-if="tab === 'expense'">
-      <table class="board-table" v-if="expenses.length">
-        <thead><tr><th>单据日期</th><th>单据编号</th><th>客商</th><th>金额</th><th>账户</th><th>备注</th></tr></thead>
-        <tbody>
-          <tr v-for="row in expenses" :key="row.id">
-            <td>{{ row.bill_date }}</td>
-            <td>{{ row.bill_code }}</td>
-            <td>{{ row.party_name || "—" }}</td>
-            <td class="money">{{ money(row.amount) }}</td>
-            <td>{{ row.account_name || "—" }}</td>
-            <td>{{ row.remark || "—" }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else class="empty-box">暂无数据</div>
-    </div>
   </div>
 </template>
 
@@ -207,7 +190,6 @@ const props = defineProps({
   direction: String,
   invoices: { type: Array, default: () => [] },
   settles: { type: Array, default: () => [] },
-  expenses: { type: Array, default: () => [] },
   linked: { type: Array, default: () => [] },
 });
 defineEmits(["go"]);
@@ -231,7 +213,6 @@ const tabs = computed(() => {
   base.push({ key: "invoice", label: invoice });
   if (sale.value) {
     base.push({ key: "purchase", label: `采购合同(${props.linked.length})` });
-    base.push({ key: "expense", label: `其他支出(${props.expenses.length})` });
   }
   return base;
 });

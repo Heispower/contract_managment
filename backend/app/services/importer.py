@@ -44,11 +44,14 @@ from .util import (
 PARSE_FAIL = "文件解析失败，请检查模板格式或必填项"
 MAX_SIZE = 10 * 1024 * 1024
 
-MODULES = {"contract", "order", "invoice", "settle", "party", "purchase-plan", "goods", "warehouse-receipt", "hs-code", "customs-material-fill"}
+MODULES = {"contract", "order", "invoice", "settle", "party", "purchase-plan", "goods", "warehouse-receipt", "hs-code", "customs-material-fill", "number-contract", "number-invoice"}
 
 
 def build_template(module: str, direction: str, party_type: str) -> tuple[bytes, str]:
     _check_module(module, direction, party_type)
+    if module in ("number-contract", "number-invoice"):
+        from .numbering_import import template_bytes
+        return template_bytes("contract" if module == "number-contract" else "invoice")
     if module == "warehouse-receipt":
         from .customs_xlsx import receipt_template
         return receipt_template()
@@ -79,6 +82,9 @@ def build_template(module: str, direction: str, party_type: str) -> tuple[bytes,
 def parse_upload(db, user, company_id, module, content: bytes, filename: str, mode: str, direction: str, party_type: str):
     mode = _normalize_mode(module, mode)
     _check_module(module, direction, party_type)
+    if module in ("number-contract", "number-invoice"):
+        from .numbering_import import parse_number_file
+        return parse_number_file(db, company_id, module, content, filename)
     if module in ("warehouse-receipt", "hs-code", "customs-material-fill"):
         from . import customs
         return customs.parse_import(db, user, company_id, module, content, filename)
@@ -120,7 +126,10 @@ def execute_upload(db, user, company_id, module, payload: dict):
     rows = payload.get("rows") or []
     if not isinstance(rows, list) or not rows:
         raise BizError(PARSE_FAIL)
-    if module in ("warehouse-receipt", "hs-code", "customs-material-fill"):
+    if module in ("number-contract", "number-invoice"):
+        from .numbering_import import execute_number_file
+        result = execute_number_file(db, user, company_id, module, rows)
+    elif module in ("warehouse-receipt", "hs-code", "customs-material-fill"):
         from . import customs
         result = customs.execute_import(db, user, company_id, module, payload)
     elif module == "purchase-plan" and mode == "replace":

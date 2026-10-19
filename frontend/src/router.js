@@ -2,9 +2,8 @@ import { createRouter, createWebHashHistory } from "vue-router";
 import AppLayout from "./layout/AppLayout.vue";
 import Login from "./views/Login.vue";
 import Home from "./views/Home.vue";
-import Party from "./views/Party.vue";
+import BusinessInfo from "./views/BusinessInfo.vue";
 import Contract from "./views/Contract.vue";
-import Order from "./views/Order.vue";
 import Wms from "./views/Wms.vue";
 import Settle from "./views/Settle.vue";
 import Invoice from "./views/Invoice.vue";
@@ -19,6 +18,7 @@ import CustomsMaterial from "./views/CustomsMaterial.vue";
 import CustomsInvoice from "./views/CustomsInvoice.vue";
 import ClearanceInvoice from "./views/ClearanceInvoice.vue";
 import CustomsElement from "./views/CustomsElement.vue";
+import NumberBoard from "./views/NumberBoard.vue";
 import Sorry from "./views/Sorry.vue";
 
 const router = createRouter({
@@ -31,11 +31,13 @@ const router = createRouter({
       children: [
         { path: "", redirect: "/home" },
         { path: "home", component: Home },
-        { path: "party/list", component: Party },
-        { path: "project/list", component: SimpleList, props: { kind: "project" } },
+        { path: "business", component: BusinessInfo },
+        { path: "party/list", redirect: { path: "/business", query: { tab: "party" } } },
+        { path: "project/list", redirect: { path: "/business", query: { tab: "project" } } },
         { path: "purchase-plan", component: SimpleList, props: { kind: "plan" } },
+        { path: "number/contracts", component: NumberBoard, props: { kind: "contract" } },
+        { path: "number/invoices", component: NumberBoard, props: { kind: "invoice" } },
         { path: "contract/:direction", component: Contract, props: true },
-        { path: "order/:direction", component: Order, props: true },
         { path: "warehouse/inbound", component: Wms, props: { billType: "inbound" } },
         { path: "warehouse/outbound", component: Wms, props: { billType: "outbound" } },
         { path: "warehouse/stock", component: SimpleList, props: { kind: "stock" } },
@@ -50,8 +52,6 @@ const router = createRouter({
         { path: "customs/rates", redirect: "/master/info?tab=rate" },
         { path: "settlement/receipt", component: Settle, props: { direction: "receipt" } },
         { path: "settlement/payment", component: Settle, props: { direction: "payment" } },
-        { path: "settlement/other-income", component: SimpleList, props: { kind: "income" } },
-        { path: "settlement/other-expense", component: SimpleList, props: { kind: "expense" } },
         { path: "settlement/pending-receipt", component: Pending, props: { direction: "sale" } },
         { path: "settlement/pending-payment", component: Pending, props: { direction: "purchase" } },
         { path: "invoice/output", component: Invoice, props: { direction: "output" } },

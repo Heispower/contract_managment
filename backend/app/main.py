@@ -14,6 +14,7 @@ from .database import (
     ensure_company_columns,
     ensure_customs_form_columns,
     ensure_hs_columns,
+    ensure_number_columns,
     ensure_item_category_columns,
     ensure_party_columns,
     ensure_project_columns,
@@ -109,6 +110,7 @@ def startup():
     ensure_item_category_columns()
     ensure_customs_form_columns()
     ensure_hs_columns()
+    ensure_number_columns()
     prepare_export_table()
     db = get_session()
     try:

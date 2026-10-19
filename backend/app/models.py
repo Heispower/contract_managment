@@ -1004,3 +1004,126 @@ class BizFile(Base, CompanyScoped):
     business_type: Mapped[str] = mapped_column(String(40))
     business_id: Mapped[int] = mapped_column(Integer, index=True)
     status: Mapped[str] = mapped_column(String(20), default="启用")
+
+
+class NumberSetting(Base):
+    """编号顺序号下限。该序号及更小的号不自动分配，删除后也不回收。"""
+    __tablename__ = "number_setting"
+    __table_args__ = (UniqueConstraint("company_id", "key", name="uq_number_setting"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(Integer, index=True)
+    key: Mapped[str] = mapped_column(String(80))
+    value: Mapped[str] = mapped_column(String(80), default="")
+
+
+class NumberSlot(Base):
+    __tablename__ = "number_slot"
+    __table_args__ = (UniqueConstraint("company_id", "pool_key", "seq", name="uq_number_slot"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(Integer, index=True)
+    pool_key: Mapped[str] = mapped_column(String(40))
+    seq: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="used")
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class NumberContract(Base, CompanyScoped):
+    """合同编号登记。可单独登记，也可由采购合同自动生成并回写。"""
+    __tablename__ = "number_contract"
+    __table_args__ = (
+        UniqueConstraint("company_id", "contract_no", name="uq_number_contract_no"),
+        UniqueConstraint("company_id", "purchase_contract_id", name="uq_number_contract_link"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    contract_no: Mapped[str] = mapped_column(String(64))
+    purchase_contract_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    business_type: Mapped[str] = mapped_column(String(20), default="锰矿")
+    number_year: Mapped[int] = mapped_column(Integer, default=0)
+    num_pool: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    num_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    product_name: Mapped[str] = mapped_column(String(200), default="")
+    party_b: Mapped[str] = mapped_column(String(200), default="")
+    party_a: Mapped[str] = mapped_column(String(200), default="")
+    amount_cny: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    sign_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    owner_id: Mapped[str] = mapped_column(String(64), default="")
+    manual_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class NumberBatch(Base, CompanyScoped):
+    __tablename__ = "number_batch"
+    __table_args__ = (UniqueConstraint("company_id", "prefix", name="uq_number_batch_prefix"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prefix: Mapped[str] = mapped_column(String(64))
+    number_rule: Mapped[str] = mapped_column(String(20))
+    number_year: Mapped[int] = mapped_column(Integer)
+    transport_type: Mapped[str] = mapped_column(String(20), default="")
+    business_type: Mapped[str] = mapped_column(String(20), default="")
+    num_pool: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    num_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class NumberBatchSlot(Base):
+    __tablename__ = "number_batch_slot"
+    __table_args__ = (UniqueConstraint("batch_id", "seq", name="uq_number_batch_slot"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(Integer, index=True)
+    batch_id: Mapped[int] = mapped_column(Integer, index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="used")
+    number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class NumberInvoice(Base, CompanyScoped):
+    """发票编号登记。可单独登记，也可由报关发票自动生成并回写。"""
+    __tablename__ = "number_invoice"
+    __table_args__ = (
+        UniqueConstraint("company_id", "invoice_no", name="uq_number_invoice_no"),
+        UniqueConstraint("company_id", "customs_invoice_id", name="uq_number_invoice_link"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    invoice_no: Mapped[str] = mapped_column(String(80))
+    number_contract_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_no: Mapped[str] = mapped_column(String(64), default="")
+    customs_invoice_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    business_type: Mapped[str] = mapped_column(String(20), default="")
+    number_rule: Mapped[str] = mapped_column(String(20), default="")
+    number_year: Mapped[int] = mapped_column(Integer, default=0)
+    num_pool: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    num_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    content: Mapped[str] = mapped_column(String(500), default="")
+    bl_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    price_term: Mapped[str] = mapped_column(String(255), default="")
+    currency: Mapped[str] = mapped_column(String(10), default="USD")
+    amount_usd: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    amount_cny: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    exchange_rate: Mapped[Decimal] = mapped_column(Qty, default=Decimal("0"))
+    exchange_month: Mapped[str] = mapped_column(String(7), default="")
+    rate_adjusted: Mapped[bool] = mapped_column(Boolean, default=False)
+    po_no: Mapped[str] = mapped_column(String(100), default="")
+    operator_name: Mapped[str] = mapped_column(String(100), default="")
+    transport_type: Mapped[str] = mapped_column(String(20), default="")
+    email_sent_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    remark: Mapped[str] = mapped_column(Text, default="")
+    bl_no: Mapped[str] = mapped_column(String(100), default="")
+    is_batch: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_batch_master: Mapped[bool] = mapped_column(Boolean, default=False)
+    batch_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    batch_prefix: Mapped[str] = mapped_column(String(64), default="")
+    batch_sub_no: Mapped[str] = mapped_column(String(20), default="")
+    sub_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manual_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class NumberEditLog(Base, CompanyScoped):
+    __tablename__ = "number_edit_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_type: Mapped[str] = mapped_column(String(20))
+    target_id: Mapped[int] = mapped_column(Integer, index=True)
+    old_no: Mapped[str] = mapped_column(String(80), default="")
+    new_no: Mapped[str] = mapped_column(String(80), default="")
+    reason: Mapped[str] = mapped_column(String(200), default="")
+    operator_name: Mapped[str] = mapped_column(String(100), default="")

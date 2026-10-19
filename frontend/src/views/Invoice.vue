@@ -38,7 +38,6 @@
       </el-form-item>
       <el-form-item :label="direction==='input'?'销售方名称':'购买方名称'"><el-input v-model="form.party_name" /></el-form-item>
       <el-form-item label="税号"><el-input v-model="form.party_tax_no" /></el-form-item>
-      <div v-if="orderHint">该合同已有订单 {{ orderHint }}</div>
     </el-form>
     <el-button @click="form.items.push({ material_code:'', name_cn:'', qty:'1', price:'0', tax_rate: form.tax_rate || '13', manual_tax:false })">手加行</el-button>
     <div class="line-box" style="margin-top:8px">
@@ -102,7 +101,6 @@ const projects = ref([]);
 const contracts = ref([]);
 const visible = ref(false);
 const showImport = ref(false);
-const orderHint = ref("");
 const sumTotal = ref(0);
 const selectedRows = ref([]);
 const summary = computed(() => `发票金额（含税合计）：￥${money(sumTotal.value)}`);
@@ -140,9 +138,6 @@ async function applyPrefill(data) {
   });
   const contractDirection = props.direction === "output" ? "sale" : "purchase";
   contracts.value = (await http.get("/api/contracts", { params: { direction: contractDirection, party_id: form.party_id, status: "已签订", pageSize: 200 } })).data.items;
-  orderHint.value = "";
-  const orders = await http.get("/api/orders", { params: { contract_id: form.contract_id, pageSize: 5 } });
-  if (orders.data.items.length) orderHint.value = orders.data.items[0].order_code;
   visible.value = true;
 }
 async function onParty() {
@@ -156,9 +151,6 @@ async function onParty() {
 }
 async function take() {
   const detail = await http.get(`/api/contracts/${form.contract_id}`);
-  orderHint.value = "";
-  const orders = await http.get("/api/orders", { params: { contract_id: form.contract_id, pageSize: 5 } });
-  if (orders.data.items.length) orderHint.value = orders.data.items[0].order_code;
   form.items = detail.data.items.filter((item) => Number(item.uninvoiced_qty) > 0).map((item) => ({
     material_code: item.material_code, name_cn: item.name_cn, spec: item.spec, unit: item.unit,
     qty: item.uninvoiced_qty, price: item.price, tax_rate: detail.data.tax_rate, manual_tax: false,

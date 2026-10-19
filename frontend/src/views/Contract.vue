@@ -65,7 +65,6 @@
             <el-dropdown-item @click="openBoard(row)">详情</el-dropdown-item>
             <el-dropdown-item @click="open(row, false)">编辑</el-dropdown-item>
             <el-dropdown-item v-if="direction==='purchase'" @click="copyContract(row)">复制</el-dropdown-item>
-            <el-dropdown-item @click="showOrder(row)">订单</el-dropdown-item>
             <el-dropdown-item @click="supplement(row)">补充</el-dropdown-item>
             <el-dropdown-item @click="ElMessage.info('无附件')">下载附件</el-dropdown-item>
             <el-dropdown-item @click="confirmRemove(row)">删除</el-dropdown-item>
@@ -80,9 +79,30 @@
       <el-tab-pane label="基本信息" name="base">
         <el-form class="contract-form" label-width="92px" :disabled="readonly">
           <el-row :gutter="16">
-            <el-col :span="12"><el-form-item label="合同编号"><el-input v-model="form.contract_code" placeholder="留空自动生成" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="合同编号"><el-input v-model="form.contract_code" :placeholder="direction === 'purchase' ? '留空按合同编号规则生成' : '留空自动生成'" /></el-form-item></el-col>
             <el-col :span="12"><el-form-item label="合同名称"><el-input v-model="form.name" /></el-form-item></el-col>
           </el-row>
+          <el-row v-if="direction === 'purchase' && form.nature !== 'supplement'" :gutter="16">
+            <el-col :span="8">
+              <el-form-item label="编号业务">
+                <el-select v-model="form.number_business" :disabled="readonly || !!form.id">
+                  <el-option label="锰矿" value="锰矿" />
+                  <el-option label="铝矿" value="铝矿" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="编号年份">
+                <el-select v-model="form.number_year" :disabled="readonly || !!form.id">
+                  <el-option v-for="year in numberYears" :key="year" :label="String(year)" :value="year" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="预览编号"><el-input :model-value="numberPreview" disabled /></el-form-item>
+            </el-col>
+          </el-row>
+          <div v-if="direction === 'purchase' && form.nature !== 'supplement' && !form.id" class="hint">合同编号留空时，按锰矿或铝矿规则生成，并同步写入「编号 / 合同编号」。</div>
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="合同类型">
@@ -283,26 +303,11 @@
     <input ref="itemFile" type="file" accept=".xlsx,.xls" hidden @change="onItemFile" />
   </el-dialog>
   <ImportWizard v-model="showImport" module="contract" :direction="direction" @done="load" />
-  <el-dialog v-model="orderVisible" title="订单详情" width="760px">
-    <div v-if="orderHead">{{ orderHead.order_code }}　{{ orderHead.status_label }}</div>
-    <div class="line-box" style="margin-top:8px">
-    <el-table :data="orderHead?.items || []" height="320" size="small" empty-text="暂无物料">
-      <el-table-column prop="material_code" label="物料编号" />
-      <el-table-column prop="name_cn" label="中文名称" />
-      <el-table-column prop="spec" label="规格" />
-      <el-table-column prop="unit" label="单位" width="70" />
-      <el-table-column prop="qty" label="数量" />
-      <el-table-column prop="price" label="含税单价" />
-      <el-table-column prop="moved_text" label="到货 / 发货" />
-    </el-table>
-    </div>
-    <template #footer><el-button @click="orderVisible=false">关闭</el-button></template>
-  </el-dialog>
   <el-dialog v-model="boardVisible" width="1120px" top="3vh" destroy-on-close>
     <template #header>
       <div>合同详情 - <span class="name-pill">{{ board?.name }}</span></div>
     </template>
-    <ContractBoard :detail="board" :direction="direction" :invoices="boardInvoices" :settles="boardSettles" :expenses="boardExpenses" :linked="boardLinked" @go="goBoard" />
+    <ContractBoard :detail="board" :direction="direction" :invoices="boardInvoices" :settles="boardSettles" :linked="boardLinked" @go="goBoard" />
   </el-dialog>
 </template>
 
@@ -402,10 +407,7 @@ const boardVisible = ref(false);
 const board = ref(null);
 const boardInvoices = ref([]);
 const boardSettles = ref([]);
-const boardExpenses = ref([]);
 const boardLinked = ref([]);
-const orderVisible = ref(false);
-const orderHead = ref(null);
 const visible = ref(false);
 const showImport = ref(false);
 const planVisible = ref(false);
@@ -420,8 +422,19 @@ const roundIndex = ref(0);
 const form = reactive(blank());
 const markup = ref("10");
 
+function defaultNumberYear() {
+  const now = new Date();
+  return now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+}
+const numberYears = computed(() => {
+  const end = new Date().getFullYear() + 1;
+  const years = [];
+  for (let year = 2020; year <= end; year += 1) years.push(year);
+  return years;
+});
+const numberPreview = ref("");
 function blank() {
-  return { id: null, version: null, contract_code: "", name: "", type_name: "", party_id: null, owner_id: "", project_id: null, status: "已签订", pricing: "fixed", tax_rate: "13", sign_date: "", content: "", terms: "", remark: "", subject_name: "", ship_address: "", receiver_name: "", transport_mode: "", delivery_term: "", freight_bearer: "", annex_note: "", acceptance_text: "", items: [blankItem()], stages: [], nature: "main", parent_contract_id: null, generated_from: null, supplements: [] };
+  return { id: null, version: null, contract_code: "", name: "", type_name: "", party_id: null, owner_id: "", project_id: null, status: "已签订", pricing: "fixed", tax_rate: "13", sign_date: "", content: "", terms: "", remark: "", subject_name: "", ship_address: "", receiver_name: "", transport_mode: "", delivery_term: "", freight_bearer: "", annex_note: "", acceptance_text: "", items: [blankItem()], stages: [], nature: "main", parent_contract_id: null, generated_from: null, supplements: [], number_business: "锰矿", number_year: defaultNumberYear() };
 }
 function blankItem() { return { material_code: "", name_cn: "", name_en: "", spec: "", unit: "", qty: "1", price: "0", plan_no: "", category: "", remark: "" }; }
 const filteredPlans = computed(() => {
@@ -479,6 +492,14 @@ function reset() {
   Object.assign(query, { party_id: null, keyword: "", status: "", project_id: null, year: "", pay_status: "", move_state: "", invoice_state: "", type_name: "", archived: "", sign_from: "", sign_to: "" });
   load();
 }
+async function refreshNumberPreview() {
+  if (!visible.value || props.direction !== "purchase" || form.nature === "supplement" || form.contract_code || form.id) {
+    numberPreview.value = form.contract_code && props.direction === "purchase" ? "已指定合同号" : "";
+    return;
+  }
+  const res = await http.get("/api/numbering/preview", { params: { kind: "contract", business_type: form.number_business, year: form.number_year } });
+  numberPreview.value = res.data.reused ? `${res.data.number}（复用空号）` : res.data.number;
+}
 async function open(row, view = false) {
   if (view && row) return openBoard(row);
   readonly.value = false;
@@ -491,6 +512,7 @@ async function open(row, view = false) {
     if (roundIndex.value < 0) roundIndex.value = 0;
   } else rebuildStages();
   visible.value = true;
+  refreshNumberPreview();
 }
 function markedPrice(cost, rate) {
   const cents = Math.round(Number(cost) * 100);
@@ -616,8 +638,6 @@ async function openBoard(row) {
   const settleDir = sale.value ? "receipt" : "payment";
   boardInvoices.value = (await http.get("/api/invoices", { params: { direction: invoiceDir, contract_id: row.id, pageSize: 200 } })).data.items || [];
   boardSettles.value = (await http.get("/api/settle-bills", { params: { direction: settleDir, contract_id: row.id, pageSize: 200 } })).data.items || [];
-  const others = (await http.get("/api/other-bills", { params: { direction: "expense", pageSize: 200 } })).data.items || [];
-  boardExpenses.value = others.filter((item) => item.contract_code === detail.contract_code);
   if (detail.project_id) {
     const otherDir = sale.value ? "purchase" : "sale";
     boardLinked.value = (await http.get("/api/contracts", { params: { direction: otherDir, project_id: detail.project_id, pageSize: 200 } })).data.items || [];
@@ -639,14 +659,6 @@ async function supplement(row) {
 function syncPick() {
   const set = shell.value?.selected || new Set();
   selectedRows.value = rows.value.filter((row) => set.has(row.id));
-}
-async function showOrder(row) {
-  if (!row.order_id) {
-    ElMessage.warning("请先生成订单");
-    return;
-  }
-  orderHead.value = (await http.get(`/api/orders/${row.order_id}`)).data;
-  orderVisible.value = true;
 }
 function openLink() {
   syncPick();
@@ -826,5 +838,8 @@ async function boot() {
   if (route.query.open) openBoard({ id: route.query.open });
 }
 watch(() => props.direction, boot);
+watch(() => [visible.value, form.number_business, form.number_year, form.contract_code, form.nature], () => {
+  if (visible.value && props.direction === "purchase") refreshNumberPreview();
+});
 onMounted(boot);
 </script>

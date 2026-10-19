@@ -129,17 +129,6 @@ function describe(module, direction, partyType) {
       ],
     };
   }
-  if (module === "order") {
-    const purchase = direction !== "sale";
-    return {
-      title: purchase ? "采购订单导入" : "销售订单导入",
-      hint: purchase ? "请下载采购订单导入模板填写后上传。须填写源合同编号。" : "请下载销售订单导入模板填写后上传。须填写源合同编号。",
-      template: purchase ? "下载采购订单导入模板" : "下载销售订单导入模板",
-      file: purchase ? "采购订单导入模板.xlsx" : "销售订单导入模板.xlsx",
-      defaultMode: "create",
-      modes: [],
-    };
-  }
   if (module === "invoice") {
     const incoming = direction !== "output";
     return {
@@ -199,6 +188,26 @@ function describe(module, direction, partyType) {
       hint: "请下载 HS Code 导入模板填写后上传。存在错误行时整批不会导入。",
       template: "下载HS Code导入模板",
       file: "HS Code导入模板.xlsx",
+      defaultMode: "create",
+      modes: [],
+    };
+  }
+  if (module === "number-contract") {
+    return {
+      title: "合同编号导入",
+      hint: "下载模板填写后上传，也可直接上传表头含「合同号」的统计表。合同编号按原样保存；符合现行规则的编号会占用顺序号，已存在的编号会跳过。",
+      template: "下载合同编号导入模板",
+      file: "合同编号导入模板.xlsx",
+      defaultMode: "create",
+      modes: [],
+    };
+  }
+  if (module === "number-invoice") {
+    return {
+      title: "发票编号导入",
+      hint: "下载模板填写后上传，也可直接上传表头含「发票号」的登记表。以 -001 结尾的分单号会归入同一批次，已存在的发票号会跳过。",
+      template: "下载发票编号导入模板",
+      file: "发票编号导入模板.xlsx",
       defaultMode: "create",
       modes: [],
     };

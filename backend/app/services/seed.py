@@ -29,11 +29,18 @@ from ..models import (
     now,
 )
 from ..security import hash_password
-from .ops import save_contract, save_order, save_settle_many, save_wms
+from .ops import save_contract, save_settle_many, save_wms
 from .util import op_log
 
 
 BUSINESS_TABLES = [
+    "number_edit_log",
+    "number_batch_slot",
+    "number_invoice",
+    "number_batch",
+    "number_contract",
+    "number_slot",
+    "number_setting",
     "customs_element_item",
     "customs_element",
     "customs_clearance_pl",
@@ -309,11 +316,6 @@ def _company_demo(db, company, admin, owner_id, supplier_code, supplier_name, cu
     })
     if small:
         return
-    save_order(db, admin, company.id, {
-        "contract_id": purchase.id,
-        "direction": "purchase",
-        "items": [{"material_code": "M001", "name_cn": "热轧钢板", "spec": "10mm", "unit": "吨", "qty": qty, "price": price}],
-    })
     warehouse = db.query(Warehouse).filter(Warehouse.company_id == company.id, Warehouse.name == "主仓").one()
     save_wms(db, admin, company.id, {
         "type": "inbound",

@@ -10,7 +10,8 @@
       <GenerateForm :shell="shell" :rows="rows" :doc-code="direction==='receipt' ? 'receipt' : 'payment'" :doc-name="title" :party-word="direction==='receipt' ? '客户' : '供应商'" :fallback-name="(row) => `${row.bill_code || title}.docx`" />
     </template>
     <template #ops="{ row }">
-      <el-popconfirm title="确定删除？" @confirm="remove(row)"><template #reference><span class="ops">删除</span></template></el-popconfirm>
+      <span class="ops" @click="openEdit(row)">编辑</span>
+      <el-popconfirm title="确定删除？" @confirm="remove(row)"><template #reference><span class="ops" style="margin-left:8px">删除</span></template></el-popconfirm>
     </template>
   </ListShell>
   <el-dialog v-model="visible" :title="'新增'+title" width="760px" @closed="onPayClosed">
@@ -45,6 +46,26 @@
     <template #footer>
       <el-button @click="visible=false">取消</el-button>
       <el-button type="primary" @click="save">保存</el-button>
+    </template>
+  </el-dialog>
+  <el-dialog v-model="editVisible" :title="'编辑'+title" width="560px">
+    <el-form label-width="90px">
+      <el-form-item label="单据编号"><el-input v-model="editForm.bill_code" disabled /></el-form-item>
+      <el-form-item label="客商"><el-input v-model="editForm.party_name" disabled /></el-form-item>
+      <el-form-item label="关联合同"><el-input v-model="editForm.contract_code" disabled /></el-form-item>
+      <el-form-item label="阶段"><el-input v-model="editForm.stage_name" disabled /></el-form-item>
+      <el-form-item label="日期"><el-date-picker v-model="editForm.bill_date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
+      <el-form-item label="金额"><el-input v-model="editForm.amount" /></el-form-item>
+      <el-form-item label="账户">
+        <el-select v-model="editForm.account_name" clearable filterable style="width:100%">
+          <el-option v-for="name in editAccounts" :key="name" :label="name" :value="name" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="备注"><el-input v-model="editForm.remark" type="textarea" :rows="2" /></el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="editVisible=false">取消</el-button>
+      <el-button type="primary" @click="saveEdit">保存</el-button>
     </template>
   </el-dialog>
   <ImportWizard v-model="showImport" module="settle" :direction="direction" @done="load" />
@@ -85,9 +106,15 @@ const stages = ref([]);
 const picked = ref([]);
 const head = ref(null);
 const visible = ref(false);
+const editVisible = ref(false);
 const pendingTrigger = ref(null);
 const showImport = ref(false);
 const form = reactive({ party_id: null, contract_id: null, bill_code: "", bill_date: "", account_name: "" });
+const editForm = reactive({ id: null, version: null, bill_code: "", party_name: "", contract_code: "", stage_name: "", bill_date: "", amount: "", account_name: "", remark: "" });
+const editAccounts = computed(() => {
+  const names = accounts.value.map((item) => item.name);
+  return editForm.account_name && !names.includes(editForm.account_name) ? [...names, editForm.account_name] : names;
+});
 
 async function load() {
   const res = await http.get("/api/settle-bills", { params: { direction: props.direction, party_id: partyId.value, page: page.value, pageSize: pageSize.value } });
@@ -158,6 +185,32 @@ async function onPayClosed() {
   router.push(trigger.kind === "arrival" ? "/warehouse/inbound" : "/warehouse/outbound");
 }
 async function remove(row) { await http.delete(`/api/settle-bills/${row.id}`, { params: { version: row.version } }); load(); }
+function openEdit(row) {
+  Object.assign(editForm, {
+    id: row.id,
+    version: row.version,
+    bill_code: row.bill_code || "",
+    party_name: row.party_name || "",
+    contract_code: row.contract_code || "",
+    stage_name: row.stage_name || "",
+    bill_date: row.bill_date || "",
+    amount: row.amount || "",
+    account_name: row.account_name || "",
+    remark: row.remark || "",
+  });
+  editVisible.value = true;
+}
+async function saveEdit() {
+  await http.put(`/api/settle-bills/${editForm.id}`, {
+    version: editForm.version,
+    bill_date: editForm.bill_date,
+    amount: editForm.amount,
+    account_name: editForm.account_name,
+    remark: editForm.remark,
+  });
+  editVisible.value = false;
+  load();
+}
 async function removeMany() {
   if (await batchDelete(shell.value, rows.value, "/api/settle-bills/batch-delete")) load();
 }

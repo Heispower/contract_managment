@@ -195,6 +195,11 @@ def ensure_hs_columns():
     ensure_columns("hs_code_library", {"product_name": "VARCHAR(200)"})
 
 
+def ensure_number_columns():
+    """合同编号登记补归属人。已有库补列，不改已填内容。"""
+    ensure_columns("number_contract", {"owner_id": "VARCHAR(64) DEFAULT ''"})
+
+
 def ensure_item_category_columns():
     """采购计划的使用设备要落到合同明细和入库明细。"""
     ensure_columns("contract_item", {"category": "VARCHAR(100)"})

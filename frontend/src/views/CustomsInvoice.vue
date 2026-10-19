@@ -31,6 +31,23 @@
         <el-table-column prop="special_label" label="申报" width="90" />
       </el-table>
     </ResizePane>
+    <el-form inline style="margin-top:12px">
+      <el-form-item label="发票编号规则">
+        <el-select v-model="numberRule" style="width:220px">
+          <el-option label="锰矿（年+四位序号）" value="锰矿" />
+          <el-option label="铝矿海运" value="铝矿海运" />
+          <el-option label="铝矿空运" value="铝矿空运" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="编号年份">
+        <el-select v-model="numberYear" style="width:110px">
+          <el-option v-for="year in numberYears" :key="year" :label="String(year)" :value="year" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="指定发票号">
+        <el-input v-model="invoiceNo" placeholder="留空按规则生成" style="width:200px" clearable />
+      </el-form-item>
+    </el-form>
     <template #footer>
       <el-button @click="createVisible=false">取消</el-button>
       <el-button type="primary" @click="create">生成</el-button>
@@ -40,7 +57,21 @@
     <template #header>
       <div>{{ draftIds.length ? "审核报关发票" : (editing ? "编辑报关发票" : "报关发票详情") }} - <span class="name-pill">{{ detail.invoice_no || "—" }}</span></div>
     </template>
-    <el-alert v-if="draftIds.length" type="info" show-icon :closable="false" title="请核对并修改。确认后才会生成，取消则不会保存。" style="margin-bottom:12px" />
+    <el-alert v-if="draftIds.length" type="info" show-icon :closable="false" title="请核对并修改。确认后才会生成，取消则不会保存。发票号留空时按编号规则生成，并写入「编号 / 发票编号」。" style="margin-bottom:12px" />
+    <el-form v-if="draftIds.length" inline style="margin-bottom:12px">
+      <el-form-item label="发票编号规则">
+        <el-select v-model="numberRule" style="width:220px" @change="reloadDraft">
+          <el-option label="锰矿（年+四位序号）" value="锰矿" />
+          <el-option label="铝矿海运" value="铝矿海运" />
+          <el-option label="铝矿空运" value="铝矿空运" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="编号年份">
+        <el-select v-model="numberYear" style="width:110px" @change="reloadDraft">
+          <el-option v-for="year in numberYears" :key="year" :label="String(year)" :value="year" />
+        </el-select>
+      </el-form-item>
+    </el-form>
     <div class="board-summary purchase">
       <div class="sum-line">
         <span><em>发票编号</em><b>{{ detail.invoice_no || "—" }}</b></span>
@@ -156,6 +187,24 @@ const detailTab = ref("master");
 const specPick = ref("");
 const editing = ref(false);
 const draftIds = ref([]);
+function defaultNumberYear() {
+  const now = new Date();
+  return now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+}
+const numberYears = computed(() => {
+  const end = new Date().getFullYear() + 1;
+  const list = [];
+  for (let year = 2020; year <= end; year += 1) list.push(year);
+  return list;
+});
+const numberRule = ref("锰矿");
+const numberYear = ref(defaultNumberYear());
+const invoiceNo = ref("");
+function numberBody() {
+  const body = { number_rule: numberRule.value, number_year: numberYear.value };
+  if (invoiceNo.value) body.invoice_no = invoiceNo.value.trim();
+  return body;
+}
 const detail = ref({ items: [], sources: [], categories: [], specification_options: [], detail_groups: [] });
 const currentItems = computed(() => {
   const groups = detail.value.detail_groups || [];
@@ -184,12 +233,12 @@ async function create() {
     ElMessage.warning("请勾选物料");
     return;
   }
-  await http.post("/api/customs/invoices", { ids: picked.value.map((row) => row.id) });
+  await http.post("/api/customs/invoices", { ids: picked.value.map((row) => row.id), ...numberBody() });
   createVisible.value = false;
   load();
 }
 async function openDraft(ids) {
-  detail.value = (await http.post("/api/customs/invoices/preview", { ids })).data;
+  detail.value = (await http.post("/api/customs/invoices/preview", { ids, ...numberBody() })).data;
   draftIds.value = ids;
   editing.value = true;
   detailTab.value = "master";
@@ -201,6 +250,8 @@ async function confirmDraft() {
     ids: draftIds.value,
     invoice_no: detail.value.invoice_no,
     invoice_date: detail.value.invoice_date_1,
+    number_rule: numberRule.value,
+    number_year: numberYear.value,
   })).data;
   const payload = { ...detail.value, version: created.version };
   delete payload.items;
@@ -213,6 +264,9 @@ async function confirmDraft() {
   draftIds.value = [];
   ElMessage.success("已生成报关发票，可继续修改");
   load();
+}
+async function reloadDraft() {
+  if (draftIds.value.length) await openDraft(draftIds.value);
 }
 function consumeDraft() {
   const raw = sessionStorage.getItem("customs-invoice-draft");
