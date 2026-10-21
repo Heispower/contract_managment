@@ -1300,6 +1300,7 @@ def create_invoice_number(db, user, company_id, payload):
     rule = (payload.get("number_rule") or "锰矿").strip()
     business = (payload.get("business_type") or "").strip()
     transport = (payload.get("transport_type") or "").strip()
+    registrar = _clean(payload.get("operator_name"), 100, "登记人") or (getattr(user, "name", None) or user.employee_id or "")[:100]
     if rule in RULE_POOL:
         business = business or POOL_BUSINESS[RULE_POOL[rule]]
         transport = transport or POOL_TRANSPORT[RULE_POOL[rule]]
@@ -1383,7 +1384,7 @@ def create_invoice_number(db, user, company_id, payload):
         exchange_month=amounts["exchange_month"],
         rate_adjusted=amounts["rate_adjusted"],
         po_no=_clean(payload.get("po_no"), 100, "PO"),
-        operator_name=(getattr(user, "name", None) or user.employee_id or "")[:100],
+        operator_name=registrar,
         transport_type=transport,
         email_sent_date=parse_date(payload.get("email_sent_date")),
         remark=_clean(payload.get("remark"), 500, "备注"),
@@ -1407,6 +1408,8 @@ def create_invoice_number(db, user, company_id, payload):
 def update_invoice_number(db, user, company_id, row, payload):
     from .util import ensure_version
     ensure_version(row, payload.get("version"))
+    if "operator_name" in payload:
+        row.operator_name = _clean(payload.get("operator_name"), 100, "登记人") or row.operator_name
     if row.customs_invoice_id:
         customs = db.get(CustomsInvoice, row.customs_invoice_id)
         if customs and not customs.deleted_at:

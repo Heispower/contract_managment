@@ -83,6 +83,9 @@
             <el-option v-for="item in invoiceRules" :key="item.value" :label="item.text" :value="item.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="登记人">
+          <el-input v-model="form.operator_name" placeholder="填写登记人；留空默认当前用户" />
+        </el-form-item>
         <el-form-item label="编号年份">
           <el-select v-model="form.number_year" :disabled="!!form.id || form.mode === 'join_batch'">
             <el-option v-for="item in years" :key="item" :label="String(item)" :value="item" />
@@ -216,7 +219,7 @@ const invoiceColumns = [
   { key: "amount_cny", label: "人民币金额", money: true },
   { key: "exchange_rate", label: "汇率", width: 90 },
   { key: "po_no", label: "PO", width: 120 },
-  { key: "operator_name", label: "操作人", width: 90 },
+  { key: "operator_name", label: "登记人", width: 100 },
   { key: "transport_type", label: "运输方式", width: 90 },
   { key: "email_sent_date", label: "发邮件时间", width: 110 },
   { key: "bl_no", label: "提单号", width: 140 },
@@ -253,7 +256,7 @@ function blankInvoice() {
   return {
     id: null, mode: "plain", number_rule: "锰矿", number_year: defaultYear(), batch_id: null, invoice_no: "",
     contract_no: "", content: "", bl_date: "", price_term: "FOB", currency: "USD", amount_usd: "", amount_cny: "",
-    exchange_month: month, exchange_rate: "", po_no: "", bl_no: "", email_sent_date: "", remark: "",
+    exchange_month: month, exchange_rate: "", po_no: "", bl_no: "", email_sent_date: "", remark: "", operator_name: "",
     customs_invoice_id: null, is_batch_master: false, transport_type: "",
   };
 }
