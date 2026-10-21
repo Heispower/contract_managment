@@ -29,6 +29,7 @@ from .numbering import (
     occupy_slot,
     parse_pool_number,
     party_a_name,
+    rule_map,
     slot_blocked,
 )
 from .util import q, stamp_new
@@ -126,11 +127,12 @@ def template_bytes(kind: str) -> tuple[bytes, str]:
 def parse_number_file(db, company_id, module, content: bytes, filename: str):
     kind = "contract" if module == "number-contract" else "invoice"
     sheets = _load_sheets(content, filename)
+    rules = rule_map(db, company_id)
     if kind == "contract":
-        items, used = _collect_contracts(sheets)
+        items, used = _collect_contracts(sheets, rules)
         empty = "没有找到可导入的合同。请使用模板，或上传表头含「合同号」的统计表。"
     else:
-        items, used = _collect_invoices(sheets)
+        items, used = _collect_invoices(sheets, rules)
         empty = "没有找到可导入的发票。请使用模板，或上传表头含「发票号」的登记表。"
     ignored = [name for name, _grid in sheets if name not in used and name != "填写说明"]
     if not items:
@@ -471,7 +473,7 @@ def _preview_rows(db, company_id, kind, items):
     return rows
 
 
-def _collect_contracts(sheets):
+def _collect_contracts(sheets, rules=None):
     items = []
     used = set()
     for name, grid in sheets:
@@ -481,7 +483,7 @@ def _collect_contracts(sheets):
         used.add(name)
         header_idx, cols = found
         for excel_row, raw in _data_rows(grid, header_idx):
-            item, error = _parse_contract_row(raw, cols)
+            item, error = _parse_contract_row(raw, cols, rules)
             if error == "blank":
                 continue
             where = f"{name} 第{excel_row}行"
@@ -494,7 +496,7 @@ def _collect_contracts(sheets):
     return items, used
 
 
-def _collect_invoices(sheets):
+def _collect_invoices(sheets, rules=None):
     items = []
     used = set()
     for name, grid in sheets:
@@ -513,7 +515,7 @@ def _collect_invoices(sheets):
                     copied[cols["invoice_no"]] = number
                     targets.append((tuple(copied), excel_row, f"{name} 第{excel_row}行第{index}个编号"))
             for target, row_no, where in targets:
-                item, error = _parse_invoice_row(target, cols)
+                item, error = _parse_invoice_row(target, cols, rules)
                 if error == "blank":
                     continue
                 if error:
@@ -532,14 +534,14 @@ def _collect_invoices(sheets):
     return items, used
 
 
-def _parse_contract_row(raw, cols):
+def _parse_contract_row(raw, cols, rules=None):
     number_text = _text(_cell(raw, cols.get("contract_no"))).replace(" ", "")
     if number_text in ("", "合同号", "合同编号", "合计", "小计", "总计", "备注"):
         return None, "blank"
     number = _normalize_contract_no(number_text)
     if not number:
         return None, "合同号无法识别"
-    pool, parsed = _match_pool(number, ("contract_mn", "contract_al"))
+    pool, parsed = _match_pool(number, ("contract_mn", "contract_al"), rules)
     if pool is None and matches_any_pattern(number):
         return None, "该编号属于发票规则，不能作为合同导入"
     if pool == "contract_mn":
@@ -586,7 +588,7 @@ def _parse_contract_row(raw, cols):
     }, None
 
 
-def _parse_invoice_row(raw, cols):
+def _parse_invoice_row(raw, cols, rules=None):
     number_text = _text(_cell(raw, cols.get("invoice_no"))).replace(" ", "")
     if number_text in ("", "发票号", "发票编号"):
         return None, "blank"
@@ -602,7 +604,7 @@ def _parse_invoice_row(raw, cols):
             return None, "分单号不能为 0"
     pool, parsed = (None, None)
     if sub is None:
-        pool, parsed = _match_pool(number_text, ("invoice_al_sea", "invoice_al_air", "invoice_mn"))
+        pool, parsed = _match_pool(number_text, ("invoice_al_sea", "invoice_al_air", "invoice_mn"), rules)
         if pool is None and matches_any_pattern(number_text):
             return None, "该编号属于合同规则，不能作为发票导入"
     transport, transport_note = _infer_transport(number_text, _cell(raw, cols.get("transport_type")))
@@ -744,11 +746,12 @@ def _data_rows(grid, header_idx):
         yield offset, raw
 
 
-def _match_pool(number, pools):
+def _match_pool(number, pools, rules=None):
     for pool in pools:
-        parsed = parse_pool_number(pool, number)
-        if parsed:
-            return pool, parsed
+        for spec in (rules or {}).get(pool) or [None]:
+            parsed = parse_pool_number(pool, number, spec)
+            if parsed:
+                return pool, parsed
     return None, None
 
 

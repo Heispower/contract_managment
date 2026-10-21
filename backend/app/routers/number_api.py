@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, Request
 
 from ..database import get_db
 from ..deps import current_user
-from ..models import NumberContract, NumberEditLog, NumberInvoice
+from ..errors import BizError
+from ..models import NumberContract, NumberEditLog, NumberInvoice, NumberRule
 from ..response import ok, page
 from ..services import numbering
 from ..services.util import ensure_version, get_row, q
@@ -39,6 +40,19 @@ def _logs(db, company_id, target_type, target_id):
 @router.get("/meta")
 def numbering_meta(user=Depends(current_user), db=Depends(get_db)):
     return ok(numbering.meta(db, user.session_company_id))
+
+
+@router.get("/rules")
+def number_rules(user=Depends(current_user), db=Depends(get_db)):
+    return ok(numbering.rule_views(db, user.session_company_id))
+
+
+@router.put("/rules/{rule_id}")
+def update_number_rule(rule_id: int, payload: dict, user=Depends(current_user), db=Depends(get_db)):
+    if not user.is_super_admin:
+        raise BizError("无权修改编号规则", 403)
+    row = get_row(db, NumberRule, rule_id, user.session_company_id)
+    return ok(numbering.update_rule(db, user, user.session_company_id, row, payload))
 
 
 @router.get("/preview")
@@ -151,6 +165,8 @@ def batches(user=Depends(current_user), db=Depends(get_db)):
 async def save_floor(request: Request, user=Depends(current_user), db=Depends(get_db)):
     payload = await _body(request)
     pool = payload.get("pool")
-    seq = numbering.parse_floor_value(pool, payload.get("value"))
+    if pool not in numbering.PATTERNS:
+        raise BizError("未知编号规则")
+    seq = numbering.parse_floor_value(pool, payload.get("value"), numbering.current_rule(db, user.session_company_id, pool))
     numbering.set_pool_floor(db, user.session_company_id, pool, seq)
     return ok(numbering.floor_state(db, user.session_company_id, pool))

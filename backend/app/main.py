@@ -117,6 +117,8 @@ def startup():
         purge_deleted_rows(db)
         realign_header_ex_tax(db)
         seed_system(db)
+        from .services.numbering import ensure_number_rules
+        ensure_number_rules(db)
         from .services.customs import ensure_deepseek_settings
         ensure_deepseek_settings(db)
         ensure_export_profiles(db)

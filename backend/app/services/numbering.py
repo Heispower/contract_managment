@@ -22,6 +22,8 @@ from ..models import (
     NumberContract,
     NumberEditLog,
     NumberInvoice,
+    NumberRule,
+    NumberRuleHistory,
     NumberSetting,
     NumberSlot,
     SysUser,
@@ -61,6 +63,106 @@ TWO_DIGIT_YEAR = {"contract_al", "invoice_al_sea", "invoice_al_air"}
 CONTRACT_POOLS = set(CONTRACT_POOL.values())
 INVOICE_POOLS = set(RULE_POOL.values())
 
+# 编号规则的出厂值。之后只在“基础资料 -> 编号规则”里改配置，
+# 已保存的 NumberContract / NumberInvoice 行不再重写。
+RULE_DEFAULTS = (
+    {"pool_key": "contract_mn", "label": "锰矿合同", "prefix": "BMI-GMI", "year_digits": 4, "seq_width": 3, "suffix": ""},
+    {"pool_key": "contract_al", "label": "铝矿合同", "prefix": "BMGG-MAZ", "year_digits": 2, "seq_width": 3, "suffix": ""},
+    {"pool_key": "invoice_mn", "label": "锰矿发票", "prefix": "", "year_digits": 4, "seq_width": 4, "suffix": ""},
+    {"pool_key": "invoice_al_sea", "label": "铝矿海运", "prefix": "BMI-BMGGMAZ", "year_digits": 2, "seq_width": 3, "suffix": "S"},
+    {"pool_key": "invoice_al_air", "label": "铝矿空运", "prefix": "BMI-BMGGMAZ", "year_digits": 2, "seq_width": 3, "suffix": "A"},
+)
+DEFAULT_RULES = {item["pool_key"]: item for item in RULE_DEFAULTS}
+
+
+def _spec(rule, pool):
+    if rule is None:
+        return DEFAULT_RULES[pool]
+    if isinstance(rule, dict):
+        return rule
+    return {
+        "pool_key": getattr(rule, "pool_key", pool),
+        "label": getattr(rule, "label", POOL_LABELS.get(pool, pool)),
+        "prefix": getattr(rule, "prefix", "") or "",
+        "year_digits": int(getattr(rule, "year_digits", 4) or 4),
+        "seq_width": int(getattr(rule, "seq_width", 3) or 3),
+        "suffix": getattr(rule, "suffix", "") or "",
+    }
+
+
+def format_rule(spec):
+    spec = _spec(spec, spec.get("pool_key") if isinstance(spec, dict) else "")
+    parts = []
+    if spec["prefix"]:
+        parts.append(f"前缀 {(spec['prefix'] or '').rstrip('-')}")
+    parts.append(f"{spec['year_digits']}位年")
+    parts.append(f"{spec['seq_width']}位序号")
+    if spec["suffix"]:
+        parts.append(f"后缀 {spec['suffix']}")
+    return " + ".join(parts)
+
+
+def format_number(pool, year, seq, rule=None):
+    spec = _spec(rule, pool)
+    year = int(year)
+    seq = int(seq)
+    digits = int(spec["year_digits"])
+    year_text = str(year)[-digits:].zfill(digits)
+    seq_text = str(seq).zfill(int(spec["seq_width"]))
+    prefix = (spec["prefix"] or "").strip().rstrip("-")
+    suffix = spec["suffix"] or ""
+    body = f"{prefix}-{year_text}{seq_text}" if prefix else f"{year_text}{seq_text}"
+    return f"{body}{suffix}"
+
+
+def format_sub_no(seq):
+    seq = int(seq)
+    return f"-{seq:03d}" if seq < 1000 else f"-{seq}"
+
+
+def _pattern_for(pool, rule=None):
+    spec = _spec(rule, pool)
+    prefix = re.escape((spec["prefix"] or "").strip().rstrip("-"))
+    suffix = re.escape(spec["suffix"] or "")
+    lead = prefix + r"\-" if prefix else ""
+    yd = int(spec["year_digits"])
+    sw = int(spec["seq_width"])
+    return re.compile(r"^" + lead + r"(\d{" + str(yd) + r"})(\d{" + str(sw) + r",})" + suffix + r"$")
+
+
+def parse_pool_number(pool, number, rule=None):
+    if pool not in PATTERNS or number is None:
+        return None
+    matched = _pattern_for(pool, rule).match(str(number).strip())
+    if not matched:
+        return None
+    seq = int(matched.group(2))
+    if seq < 1:
+        return None
+    year_raw = matched.group(1)
+    year = 2000 + int(year_raw) if len(year_raw) == 2 else int(year_raw)
+    if year < 2000 or year > 2099:
+        return None
+    return year, seq
+
+
+def detect_pools(number, rules=None):
+    """rules: {pool: [当前规则, 历史规则...]}；不传时用出厂规则。"""
+    text = "" if number is None else str(number).strip()
+    found = []
+    for pool in PATTERNS:
+        specs = (rules or {}).get(pool) or [None]
+        for spec in specs:
+            parsed = parse_pool_number(pool, text, spec)
+            if parsed and (pool, parsed) not in found:
+                found.append((pool, parsed))
+                break
+    return found
+
+
+def matches_any_pattern(number):
+    return bool(detect_pools(number))
+
 
 def default_number_year(today=None):
     today = today or date.today()
@@ -90,57 +192,6 @@ def parse_year(value):
     if value in (None, ""):
         return default_number_year()
     return normalize_year(value)
-
-
-def format_number(pool, year, seq):
-    year = int(year)
-    seq = int(seq)
-    if pool == "contract_mn":
-        return f"BMI-GMI-{year}{seq:03d}"
-    if pool == "contract_al":
-        return f"BMGG-MAZ-{year % 100:02d}{seq:03d}"
-    if pool == "invoice_al_sea":
-        return f"BMI-BMGGMAZ-{year % 100:02d}{seq:03d}S"
-    if pool == "invoice_al_air":
-        return f"BMI-BMGGMAZ-{year % 100:02d}{seq:03d}A"
-    if pool == "invoice_mn":
-        return f"{year}{seq:04d}"
-    raise BizError("未知编号规则")
-
-
-def format_sub_no(seq):
-    seq = int(seq)
-    return f"-{seq:03d}" if seq < 1000 else f"-{seq}"
-
-
-def parse_pool_number(pool, number):
-    pattern = PATTERNS.get(pool)
-    if not pattern or number is None:
-        return None
-    matched = pattern.match(str(number).strip())
-    if not matched:
-        return None
-    seq = int(matched.group(2))
-    if seq < 1:
-        return None
-    year = 2000 + int(matched.group(1)) if pool in TWO_DIGIT_YEAR else int(matched.group(1))
-    if year < 2000 or year > 2099:
-        return None
-    return year, seq
-
-
-def detect_pools(number):
-    text = "" if number is None else str(number).strip()
-    found = []
-    for pool in PATTERNS:
-        parsed = parse_pool_number(pool, text)
-        if parsed:
-            found.append((pool, parsed))
-    return found
-
-
-def matches_any_pattern(number):
-    return bool(detect_pools(number))
 
 
 def _clean(value, limit, name, required=False):
@@ -210,11 +261,165 @@ def pool_floor(db, company_id, pool):
     return int(row.value)
 
 
-def parse_floor_value(pool, raw):
+def current_rule(db, company_id, pool):
+    row = (
+        db.query(NumberRule)
+        .filter(NumberRule.company_id == company_id, NumberRule.pool_key == pool)
+        .first()
+    )
+    return _spec(row, pool) if row else DEFAULT_RULES[pool]
+
+
+def rule_specs(db, company_id, pool):
+    """当前规则 + 改名前的历史规则，用于识别旧编号。"""
+    rows = []
+    current = (
+        db.query(NumberRule)
+        .filter(NumberRule.company_id == company_id, NumberRule.pool_key == pool)
+        .first()
+    )
+    if current:
+        rows.append(_spec(current, pool))
+    history = (
+        db.query(NumberRuleHistory)
+        .filter(NumberRuleHistory.company_id == company_id, NumberRuleHistory.pool_key == pool)
+        .order_by(NumberRuleHistory.id.desc())
+        .all()
+    )
+    for item in history:
+        rows.append(_spec(item, pool))
+    if not rows:
+        rows.append(DEFAULT_RULES[pool])
+    seen = set()
+    unique = []
+    for item in rows:
+        key = (item["prefix"], item["year_digits"], item["seq_width"], item["suffix"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
+
+
+def rule_map(db, company_id):
+    return {pool: rule_specs(db, company_id, pool) for pool in PATTERNS}
+
+
+def ensure_number_rules(db):
+    """给每家公司补一份出厂编号规则；已有配置不覆盖。"""
+    companies = db.query(Company).filter(Company.deleted_at.is_(None)).all()
+    for company in companies:
+        for spec in RULE_DEFAULTS:
+            exists = (
+                db.query(NumberRule)
+                .filter(NumberRule.company_id == company.id, NumberRule.pool_key == spec["pool_key"])
+                .first()
+            )
+            if exists:
+                continue
+            db.add(NumberRule(
+                company_id=company.id,
+                pool_key=spec["pool_key"],
+                label=spec["label"],
+                prefix=spec["prefix"],
+                year_digits=spec["year_digits"],
+                seq_width=spec["seq_width"],
+                suffix=spec["suffix"],
+                remark="",
+                enabled=True,
+                version=1,
+                created_by="system",
+                updated_by="system",
+                created_at=now(),
+                updated_at=now(),
+            ))
+    db.flush()
+
+
+def _rule_view(db, company_id, pool):
+    row = (
+        db.query(NumberRule)
+        .filter(NumberRule.company_id == company_id, NumberRule.pool_key == pool)
+        .first()
+    )
+    spec = _spec(row, pool) if row else DEFAULT_RULES[pool]
+    preview = ""
+    next_seq = 1
+    try:
+        item = preview_number(db, company_id, pool, default_number_year())
+        preview = item["number"]
+        next_seq = item["seq"]
+    except BizError:
+        pass
+    return {
+        "id": row.id if row else None,
+        "version": row.version if row else None,
+        "pool_key": pool,
+        "label": spec["label"],
+        "prefix": spec["prefix"],
+        "year_digits": spec["year_digits"],
+        "seq_width": spec["seq_width"],
+        "suffix": spec["suffix"],
+        "format_text": format_rule(spec),
+        "preview": preview,
+        "next_seq": next_seq,
+        "remark": (row.remark if row else "") or "",
+        "enabled": bool(row.enabled) if row else True,
+    }
+
+
+def rule_views(db, company_id):
+    return [_rule_view(db, company_id, spec["pool_key"]) for spec in RULE_DEFAULTS]
+
+
+def update_rule(db, user, company_id, row, payload):
+    from .util import ensure_version
+    ensure_version(row, payload.get("version"))
+    prefix = _clean(payload.get("prefix"), 40, "前缀")
+    if any(ch.isspace() for ch in prefix):
+        raise BizError("前缀不能包含空格")
+    try:
+        year_digits = int(payload.get("year_digits") if payload.get("year_digits") not in (None, "") else row.year_digits)
+        seq_width = int(payload.get("seq_width") if payload.get("seq_width") not in (None, "") else row.seq_width)
+    except (TypeError, ValueError):
+        raise BizError("年份位数或序号位数不正确")
+    if year_digits not in (2, 4):
+        raise BizError("年份位数只能是 2 或 4")
+    if seq_width < 1 or seq_width > 8:
+        raise BizError("序号位数需在 1 到 8 之间")
+    suffix = _clean(payload.get("suffix"), 10, "后缀")
+    if any(ch.isspace() for ch in suffix):
+        raise BizError("后缀不能包含空格")
+    old = (row.prefix or "", int(row.year_digits), int(row.seq_width), row.suffix or "")
+    new = (prefix, year_digits, seq_width, suffix)
+    if old != new:
+        db.add(NumberRuleHistory(
+            company_id=company_id,
+            pool_key=row.pool_key,
+            prefix=old[0],
+            year_digits=old[1],
+            seq_width=old[2],
+            suffix=old[3],
+        ))
+    row.prefix = prefix
+    row.year_digits = year_digits
+    row.seq_width = seq_width
+    row.suffix = suffix
+    if "remark" in payload:
+        row.remark = (payload.get("remark") or "")[:255]
+    bump(row, user.employee_id)
+    db.flush()
+    op_log(db, user, company_id, "修改编号规则", "number_rule", row.id, {
+        "old": {"prefix": old[0], "year_digits": old[1], "seq_width": old[2], "suffix": old[3]},
+        "new": {"prefix": new[0], "year_digits": new[1], "seq_width": new[2], "suffix": new[3]},
+    })
+    return _rule_view(db, company_id, row.pool_key)
+
+
+def parse_floor_value(pool, raw, rule=None):
     text = "" if raw is None else str(raw).strip()
     if not text:
         raise BizError("请填写最新顺序号，或该规则的完整编号")
-    parsed = parse_pool_number(pool, text)
+    parsed = parse_pool_number(pool, text, rule)
     if parsed:
         return parsed[1]
     if matches_any_pattern(text):
@@ -282,9 +487,10 @@ def preview_number(db, company_id, pool, year, **excepts):
     if pool not in PATTERNS:
         raise BizError("未知编号规则")
     year = normalize_year(year)
+    rule = current_rule(db, company_id, pool)
     free_seqs, max_seq = _free_and_max(db, company_id, pool)
     for seq in _candidate_seqs(free_seqs, max_seq):
-        number = format_number(pool, year, seq)
+        number = format_number(pool, year, seq, rule)
         if number_exists(db, company_id, number, **excepts):
             continue
         return {"number": number, "seq": seq, "reused": seq in free_seqs, "pool": pool, "year": year}
@@ -314,10 +520,11 @@ def allocate_number(db, company_id, pool, year, **excepts):
     if pool not in PATTERNS:
         raise BizError("未知编号规则")
     year = normalize_year(year)
+    rule = current_rule(db, company_id, pool)
     free_seqs, max_seq = _free_and_max(db, company_id, pool)
     free_set = set(free_seqs)
     for seq in _candidate_seqs(free_seqs, max_seq):
-        number = format_number(pool, year, seq)
+        number = format_number(pool, year, seq, rule)
         if number_exists(db, company_id, number, **excepts):
             continue
         if seq in free_set:
@@ -580,9 +787,14 @@ def _fill_contract_fields(db, company_id, row, contract):
 def _bind_pattern(db, company_id, row, number, pools, preferred=None, self_contract_id=None, self_invoice_id=None):
     """按编号占用顺序号。对不上规则的历史编号不占坑。"""
     number = (number or "").strip()
-    hits = [(pool, parsed) for pool, parsed in detect_pools(number) if pool in pools]
+    rules = rule_map(db, company_id)
+    hits = [(pool, parsed) for pool, parsed in detect_pools(number, rules) if pool in pools]
     if preferred:
-        parsed = parse_pool_number(preferred, number)
+        parsed = None
+        for spec in rules.get(preferred) or [None]:
+            parsed = parse_pool_number(preferred, number, spec)
+            if parsed:
+                break
         if parsed is None:
             if hits:
                 raise BizError("编号格式与当前编号规则不一致")
@@ -1327,20 +1539,38 @@ def recent_batches(db, company_id):
 def floor_state(db, company_id, pool):
     year = default_number_year()
     floor = pool_floor(db, company_id, pool)
+    rule = current_rule(db, company_id, pool)
     try:
         preview = preview_number(db, company_id, pool, year)["number"]
     except BizError:
         preview = ""
-    return {"pool": pool, "label": POOL_LABELS[pool], "floor": floor, "preview": preview, "year": year}
+    return {
+        "pool": pool,
+        "label": rule.get("label") or POOL_LABELS[pool],
+        "format_text": format_rule(rule),
+        "prefix": rule.get("prefix") or "",
+        "floor": floor,
+        "preview": preview,
+        "year": year,
+    }
 
 
 def meta(db, company_id):
+    def option(pool):
+        rule = current_rule(db, company_id, pool)
+        return {
+            "pool": pool,
+            "label": rule.get("label") or POOL_LABELS[pool],
+            "format_text": format_rule(rule),
+            "text": f"{rule.get('label') or POOL_LABELS[pool]}（{format_rule(rule)}）",
+        }
+
     return {
         "years": year_options(),
         "default_year": default_number_year(),
         "party_a": party_a_name(db, company_id),
-        "contract_types": [{"value": key, "pool": pool, "label": POOL_LABELS[pool]} for key, pool in CONTRACT_POOL.items()],
-        "invoice_rules": [{"value": key, "pool": pool, "label": POOL_LABELS[pool]} for key, pool in RULE_POOL.items()],
+        "contract_types": [{"value": key, **option(pool)} for key, pool in CONTRACT_POOL.items()],
+        "invoice_rules": [{"value": key, **option(pool)} for key, pool in RULE_POOL.items()],
         "contract_floors": [floor_state(db, company_id, pool) for pool in CONTRACT_POOL.values()],
         "invoice_floors": [floor_state(db, company_id, pool) for pool in RULE_POOL.values()],
         "batches": recent_batches(db, company_id),

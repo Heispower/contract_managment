@@ -5,6 +5,7 @@
       <el-tab-pane label="公司管理" name="company" />
       <el-tab-pane label="资金账户" name="account" />
       <el-tab-pane label="合同类型" name="type" />
+      <el-tab-pane label="编号规则" name="numbering" />
       <el-tab-pane label="仓库" name="warehouse" />
       <el-tab-pane label="商品列表" name="goods" />
       <el-tab-pane label="商品分类" name="category" />
@@ -14,19 +15,20 @@
       <el-tab-pane label="Deepseek" name="deepseek" />
     </el-tabs>
     <p v-if="tab === 'export'" style="color:var(--muted);margin:0 0 12px">同一张单据可以维护多份模板。模板可以是 doc、docx、xls、xlsx 等文件，填写绝对地址或直接上传。生成时如果有多份，会按供应商弹出选择。</p>
+    <p v-if="tab === 'numbering'" style="color:var(--muted);margin:0 0 12px">这里只改以后新编号的前缀、年份位数、序号位数和后缀。已经保存的合同编号、发票编号以及它们的顺序号不会重算；改前缀后序号仍从原池子继续排。</p>
     <ListShell v-if="tab !== 'deepseek'" ref="shell" bare :title="tabLabel" :storage-key="'master-' + tab" :columns="shellColumns" :rows="rows" :total="total" :page="page" :page-size="pageSize" :expandable="false" :export-module="exportModule" :export-query="{ keyword }" @query="search" @reset="reset" @page="(value) => { page = value; load(); }" @size="(value) => { pageSize = value; page = 1; load(); }">
       <template #filters>
         <el-input v-model="keyword" clearable placeholder="关键字" style="width:220px" @keyup.enter="search" />
       </template>
       <template #toolbar>
-        <el-button type="primary" @click="tab === 'export' ? openExport() : open()">新增</el-button>
+        <el-button v-if="tab !== 'numbering'" type="primary" @click="tab === 'export' ? openExport() : open()">新增</el-button>
         <el-button v-if="tab === 'goods' || tab === 'hs'" @click="showImport = true">导入</el-button>
         <el-button v-if="batchApi[tab]" @click="removeMany">批量删除</el-button>
         <el-button v-if="tab === 'export'" @click="downloadFields">字段清单</el-button>
       </template>
       <template #ops="{ row }">
         <span class="ops" @click="tab === 'export' ? openExport(row) : open(row)">编辑</span>
-        <el-popconfirm title="确定删除？" @confirm="tab === 'export' ? removeExport(row) : remove(row)"><template #reference><span class="ops" style="margin-left:8px">删除</span></template></el-popconfirm>
+        <el-popconfirm v-if="tab !== 'numbering'" title="确定删除？" @confirm="tab === 'export' ? removeExport(row) : remove(row)"><template #reference><span class="ops" style="margin-left:8px">删除</span></template></el-popconfirm>
       </template>
     </ListShell>
     <div v-if="tab === 'deepseek'" class="card" style="max-width:760px;padding:16px">
@@ -168,7 +170,7 @@ import ListShell from "../components/ListShell.vue";
 import ImportWizard from "../components/ImportWizard.vue";
 
 const route = useRoute();
-const openedTabs = ["hs", "rate", "deepseek"];
+const openedTabs = ["hs", "rate", "deepseek", "numbering"];
 const tab = ref(openedTabs.includes(String(route.query.tab || "")) ? String(route.query.tab) : "company");
 const rows = ref([]);
 const total = ref(0);
@@ -211,6 +213,17 @@ const meta = {
       { key: "code", label: "编码", fixed: "left" }, { key: "name", label: "名称" }, { key: "remark", label: "备注" }, { key: "status", label: "状态", tag: true },
     ],
     fields: ["code", "name", "remark", "status"],
+  },
+  numbering: {
+    label: "编号规则", api: "/api/numbering/rules", export: "",
+    columns: [
+      { key: "label", label: "单据", fixed: "left", width: 110 },
+      { key: "prefix", label: "前缀", width: 140 },
+      { key: "format_text", label: "编号组成", width: 210 },
+      { key: "preview", label: "下一个编号", width: 180 },
+      { key: "remark", label: "备注" },
+    ],
+    fields: ["prefix", "year_digits", "seq_width", "suffix", "remark"],
   },
   warehouse: {
     label: "仓库", api: "/api/warehouses", export: "warehouses",
@@ -265,7 +278,7 @@ const fieldLabels = {
   name: "名称", code: "编码", account_no: "账号", status: "状态", remark: "备注", material_code: "物料编号", spec: "规格", unit: "单位",
   category_code: "分类编码", price: "含税单价", hs_code: "HS Code", declaration_name: "申报名称", product_name: "产品名称",
   specification: "申报规格", declaration_elements: "报关要素", description: "描述", year: "年", month: "月", currency: "币种",
-  rate: "汇率", effective_date: "生效日期",
+  rate: "汇率", effective_date: "生效日期", prefix: "前缀", year_digits: "年份位数", seq_width: "序号位数", suffix: "后缀",
 };
 const tabLabel = computed(() => meta[tab.value]?.label || "");
 const shellColumns = computed(() => meta[tab.value]?.columns || []);
@@ -325,6 +338,11 @@ async function load() {
       timeout_seconds: Number(res.data.timeout_seconds),
     });
     if (res.data.models && res.data.models.length) aiModels.value = res.data.models;
+    return;
+  }
+  if (tab.value === "numbering") {
+    const res = await http.get(meta.numbering.api);
+    localPage(res.data || []);
     return;
   }
   const res = await http.get(meta[tab.value].api, { params: { page: page.value, pageSize: pageSize.value, keyword: keyword.value } });

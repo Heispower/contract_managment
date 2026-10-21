@@ -1016,6 +1016,34 @@ class NumberSetting(Base):
     value: Mapped[str] = mapped_column(String(80), default="")
 
 
+class NumberRule(Base, CompanyScoped):
+    """编号规则。只影响之后生成的新编号，不回写已保存编号。"""
+    __tablename__ = "number_rule"
+    __table_args__ = (UniqueConstraint("company_id", "pool_key", name="uq_number_rule_pool"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pool_key: Mapped[str] = mapped_column(String(40))
+    label: Mapped[str] = mapped_column(String(40), default="")
+    prefix: Mapped[str] = mapped_column(String(40), default="")
+    year_digits: Mapped[int] = mapped_column(Integer, default=4)
+    seq_width: Mapped[int] = mapped_column(Integer, default=3)
+    suffix: Mapped[str] = mapped_column(String(10), default="")
+    remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class NumberRuleHistory(Base):
+    """编号规则变更历史，用于继续识别改名前的历史编号。"""
+    __tablename__ = "number_rule_history"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(Integer, index=True)
+    pool_key: Mapped[str] = mapped_column(String(40))
+    prefix: Mapped[str] = mapped_column(String(40), default="")
+    year_digits: Mapped[int] = mapped_column(Integer, default=4)
+    seq_width: Mapped[int] = mapped_column(Integer, default=3)
+    suffix: Mapped[str] = mapped_column(String(10), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class NumberSlot(Base):
     __tablename__ = "number_slot"
     __table_args__ = (UniqueConstraint("company_id", "pool_key", "seq", name="uq_number_slot"),)

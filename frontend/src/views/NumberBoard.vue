@@ -40,8 +40,7 @@
       <template v-if="isContract">
         <el-form-item label="业务类型">
           <el-select v-model="form.business_type" :disabled="!!form.id">
-            <el-option label="锰矿（BMI-GMI-四位年+三位序号）" value="锰矿" />
-            <el-option label="铝矿（BMGG-MAZ-两位年+三位序号）" value="铝矿" />
+            <el-option v-for="item in contractTypes" :key="item.value" :label="item.text" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="编号年份">
@@ -81,9 +80,7 @@
         </el-form-item>
         <el-form-item label="编号规则">
           <el-select v-model="form.number_rule" :disabled="!!form.id || form.mode === 'join_batch'">
-            <el-option label="锰矿（四位年+四位序号）" value="锰矿" />
-            <el-option label="铝矿海运（两位年+三位序号+S）" value="铝矿海运" />
-            <el-option label="铝矿空运（两位年+三位序号+A）" value="铝矿空运" />
+            <el-option v-for="item in invoiceRules" :key="item.value" :label="item.text" :value="item.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="编号年份">
@@ -183,6 +180,8 @@ const year = ref("");
 const sortOrder = ref("desc");
 const years = ref([]);
 const batches = ref([]);
+const contractTypes = ref([]);
+const invoiceRules = ref([]);
 const floors = ref([]);
 const visible = ref(false);
 const floorVisible = ref(false);
@@ -267,6 +266,8 @@ async function loadMeta() {
   const res = await http.get("/api/numbering/meta");
   years.value = res.data.years || [];
   batches.value = res.data.batches || [];
+  contractTypes.value = res.data.contract_types || [];
+  invoiceRules.value = res.data.invoice_rules || [];
   const source = isContract.value ? res.data.contract_floors : res.data.invoice_floors;
   floors.value = (source || []).map((item) => ({ ...item, draft: "" }));
   return res.data;
